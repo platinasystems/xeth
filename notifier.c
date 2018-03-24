@@ -45,10 +45,10 @@ static inline int xeth_notifier(struct notifier_block *unused,
 	return NOTIFY_DONE;
 }
 
-void xeth_notifier_init(void)
+int xeth_notifier_init(void)
 {
 	xeth.notifier.notifier_call = xeth_notifier;
-	register_netdevice_notifier(&xeth.notifier);
+	return register_netdevice_notifier(&xeth.notifier);
 }
 
 void xeth_notifier_exit(void)
