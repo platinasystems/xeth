@@ -40,21 +40,20 @@ type InterfaceEntry struct {
 type Ifcache struct {
 	indexes []int32
 	index   map[int32]*InterfaceEntry
-	dir     map[string]*InterfaceEntry
+	// only map XETH_DEVTYPE_XETH_PORT by name
+	dir map[string]*InterfaceEntry
 }
 
 var Interface Ifcache
 
 func (c *Ifcache) Indexed(ifindex int32) *InterfaceEntry {
-	entry, found := c.index[ifindex]
-	if !found {
-		if p, err := net.InterfaceByIndex(int(ifindex)); err == nil {
-			entry = c.newEntry(ifindex)
-			c.dir[p.Name] = entry
-			entry.cache(p)
-		}
+	if entry, found := c.index[ifindex]; found {
+		return entry
 	}
-	return entry
+	if p, err := net.InterfaceByIndex(int(ifindex)); err == nil {
+		return c.cache(int32(p.Index), p)
+	}
+	return nil
 }
 
 // Call given function with each cached interface entry ceasing on error.
@@ -71,15 +70,7 @@ func (c *Ifcache) Iterate(f func(*InterfaceEntry) error) error {
 }
 
 func (c *Ifcache) Named(name string) *InterfaceEntry {
-	entry, found := c.dir[name]
-	if !found {
-		if p, err := net.InterfaceByName(name); err == nil {
-			entry = c.newEntry(int32(p.Index))
-			c.dir[p.Name] = entry
-			entry.cache(p)
-		}
-	}
-	return entry
+	return c.dir[name]
 }
 
 func (c *Ifcache) cache(ifindex int32, args ...interface{}) *InterfaceEntry {
@@ -110,7 +101,7 @@ func (c *Ifcache) del(ifindex int32) {
 
 func (c *Ifcache) newEntry(ifindex int32) *InterfaceEntry {
 	entry := new(InterfaceEntry)
-	entry.Ifinfo.Index = ifindex
+	entry.Index = ifindex
 	c.index[ifindex] = entry
 	c.indexes = append(c.indexes, ifindex)
 	return entry
@@ -234,16 +225,14 @@ func (entry *InterfaceEntry) cache(args ...interface{}) {
 }
 
 func (entry *InterfaceEntry) dub(name string) {
-	if name != entry.Ifinfo.Name {
-		existingEntry, found := Interface.dir[name]
-		if found {
-			if existingEntry != entry {
-				panic(fmt.Errorf("%q duplicate", name))
-			}
-			// rename
-			delete(Interface.dir, entry.Ifinfo.Name)
+	if entry.Name == name {
+		return
+	}
+	if entry.DevType == XETH_DEVTYPE_XETH_PORT {
+		if len(entry.Name) > 0 {
+			delete(Interface.dir, entry.Name)
 		}
 		Interface.dir[name] = entry
-		entry.Ifinfo.Name = name
 	}
+	entry.Name = name
 }

@@ -31,16 +31,20 @@ const (
 const (
 	XETH_DEVTYPE_LINUX_UNKNOWN = 128 + iota
 	XETH_DEVTYPE_LINUX_VLAN
+	XETH_DEVTYPE_LINUX_VLAN_BRIDGE_PORT
+	XETH_DEVTYPE_LINUX_BRIDGE
 )
 
 type DevType uint8
 
 func (dt DevType) String() string {
 	s, found := map[DevType]string{
-		XETH_DEVTYPE_XETH_PORT:     "port",
-		XETH_DEVTYPE_XETH_BRIDGE:   "bridge",
-		XETH_DEVTYPE_LINUX_UNKNOWN: "linux",
-		XETH_DEVTYPE_LINUX_VLAN:    "vlan",
+		XETH_DEVTYPE_XETH_PORT:              "port",
+		XETH_DEVTYPE_XETH_BRIDGE:            "deprecated-xeth-bridge",
+		XETH_DEVTYPE_LINUX_UNKNOWN:          "linux",
+		XETH_DEVTYPE_LINUX_VLAN:             "vlan",
+		XETH_DEVTYPE_LINUX_VLAN_BRIDGE_PORT: "vlan-bridge-port",
+		XETH_DEVTYPE_LINUX_BRIDGE:           "bridge",
 	}[dt]
 	if !found {
 		s = fmt.Sprintf("devtype[%d]", int(dt))

@@ -105,12 +105,14 @@ func Stop() {
 	xeth.sock.Close()
 	close(xeth.txch)
 	xeth.sock = nil
-	for ifindex, entry := range Interface.index {
-		delete(Interface.dir, entry.Ifinfo.Name)
+	Interface.indexes = Interface.indexes[:0]
+	for ifindex := range Interface.index {
 		delete(Interface.index, ifindex)
 	}
-	Interface.indexes = Interface.indexes[:0]
 	Interface.index = nil
+	for name := range Interface.dir {
+		delete(Interface.dir, name)
+	}
 	Interface.dir = nil
 }
 
