@@ -99,12 +99,13 @@ func Stop() {
 	if xeth.sock == nil {
 		return
 	}
-	if f, err := xeth.sock.File(); err == nil {
+	close(xeth.txch)
+	sock := xeth.sock
+	xeth.sock = nil
+	if f, err := sock.File(); err == nil {
 		syscall.Shutdown(int(f.Fd()), SHUT_RDWR)
 	}
-	xeth.sock.Close()
-	close(xeth.txch)
-	xeth.sock = nil
+	sock.Close()
 	Interface.indexes = Interface.indexes[:0]
 	for ifindex := range Interface.index {
 		delete(Interface.index, ifindex)
