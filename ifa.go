@@ -55,5 +55,8 @@ func (ifa *MsgIfa) IPNet() *net.IPNet {
 	maskBuf := make([]byte, 4)
 	*(*uint32)(unsafe.Pointer(&ipBuf[0])) = ifa.Address
 	*(*uint32)(unsafe.Pointer(&maskBuf[0])) = ifa.Mask
-	return &net.IPNet{net.IP(ipBuf), net.IPMask(maskBuf)}
+	ipNet := new(net.IPNet)
+	ipNet.IP = net.IP(ipBuf)
+	ipNet.Mask = net.IPMask(maskBuf)
+	return ipNet
 }

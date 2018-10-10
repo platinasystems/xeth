@@ -95,12 +95,6 @@ func (event FibNHEvent) String() string {
 	return s
 }
 
-func (fe *MsgFibentry) NextHop(i int) *NextHop {
-	ptr := unsafe.Pointer(fe)
-	nhptr := uintptr(ptr) + uintptr(SizeofMsgFibentry)
-	return (*NextHop)(unsafe.Pointer(nhptr + uintptr(SizeofNextHop*i)))
-}
-
 func (fe *MsgFibentry) NextHops() []NextHop {
 	ptr := unsafe.Pointer(fe)
 	nhs := int(fe.Nhs)
@@ -116,7 +110,10 @@ func (fe *MsgFibentry) Prefix() *net.IPNet {
 	maskBuf := make([]byte, 4)
 	*(*uint32)(unsafe.Pointer(&ipBuf[0])) = fe.Address
 	*(*uint32)(unsafe.Pointer(&maskBuf[0])) = fe.Mask
-	return &net.IPNet{net.IP(ipBuf), net.IPMask(maskBuf)}
+	ipNet := new(net.IPNet)
+	ipNet.IP = net.IP(ipBuf)
+	ipNet.Mask = net.IPMask(maskBuf)
+	return ipNet
 }
 
 func (fe *MsgFibentry) String() string {

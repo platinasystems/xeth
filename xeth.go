@@ -234,7 +234,6 @@ func UntilSig(sig <-chan os.Signal, f func([]byte) error) error {
 			}
 		}
 	}
-	return nil
 }
 
 func isEAGAIN(err error) bool {
