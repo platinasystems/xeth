@@ -10,6 +10,7 @@ const (
 	SizeofMsg			= 0x10
 	SizeofMsgBreak			= 0x10
 	SizeofMsgCarrier		= 0x18
+	SizeofMsgChangeUpper		= 0x20
 	SizeofMsgDumpFibinfo		= 0x10
 	SizeofMsgDumpIfinfo		= 0x10
 	SizeofMsgEthtoolFlags		= 0x18
@@ -48,6 +49,18 @@ type MsgCarrier struct {
 	Ifindex	int32
 	Flag	uint8
 	Pad	[3]uint8
+}
+
+type MsgChangeUpper struct {
+	Z64	uint64
+	Z32	uint32
+	Z16	uint16
+	Z8	uint8
+	Kind	uint8
+	Upper	int32
+	Lower	int32
+	Linking	uint8
+	Pad	[7]uint8
 }
 
 type MsgEthtoolFlags struct {

@@ -44,6 +44,7 @@ const (
 	XETH_MSG_KIND_IFDEL
 	XETH_MSG_KIND_NEIGH_UPDATE
 	XETH_MSG_KIND_IFVID
+	XETH_MSG_KIND_CHANGE_UPPER
 )
 
 const XETH_MSG_KIND_NOT_MSG = 0xff
@@ -84,6 +85,7 @@ func (kind Kind) String() string {
 		"ifdel",
 		"neigh-update",
 		"ifvid",
+		"change-upper",
 	}
 	i := int(kind)
 	if kind == XETH_MSG_KIND_NOT_MSG {
@@ -96,6 +98,9 @@ func (kind Kind) String() string {
 
 func (kind Kind) cache(buf []byte) {
 	switch kind {
+	case XETH_MSG_KIND_CHANGE_UPPER:
+		msg := ToMsgChangeUpper(buf)
+		Interface.cache(msg.Lower, msg)
 	case XETH_MSG_KIND_IFA:
 		msg := ToMsgIfa(buf)
 		Interface.cache(msg.Ifindex, msg)
@@ -139,6 +144,7 @@ func (kind Kind) validate(buf []byte) error {
 		return fmt.Errorf("corrupt message")
 	}
 	n, found := map[Kind]int{
+		XETH_MSG_KIND_CHANGE_UPPER:     SizeofMsgChangeUpper,
 		XETH_MSG_KIND_ETHTOOL_FLAGS:    SizeofMsgEthtoolFlags,
 		XETH_MSG_KIND_ETHTOOL_SETTINGS: SizeofMsgEthtoolSettings,
 		XETH_MSG_KIND_IFA:              SizeofMsgIfa,
@@ -153,6 +159,10 @@ func (kind Kind) validate(buf []byte) error {
 
 func ToMsgCarrier(buf []byte) *MsgCarrier {
 	return (*MsgCarrier)(unsafe.Pointer(&buf[0]))
+}
+
+func ToMsgChangeUpper(buf []byte) *MsgChangeUpper {
+	return (*MsgChangeUpper)(unsafe.Pointer(&buf[0]))
 }
 
 func ToMsgEthtoolFlags(buf []byte) *MsgEthtoolFlags {

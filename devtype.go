@@ -26,7 +26,6 @@ import "fmt"
 
 const (
 	XETH_DEVTYPE_XETH_PORT = iota
-	XETH_DEVTYPE_XETH_BRIDGE
 )
 const (
 	XETH_DEVTYPE_LINUX_UNKNOWN = 128 + iota
@@ -40,7 +39,6 @@ type DevType uint8
 func (dt DevType) String() string {
 	s, found := map[DevType]string{
 		XETH_DEVTYPE_XETH_PORT:              "port",
-		XETH_DEVTYPE_XETH_BRIDGE:            "deprecated-xeth-bridge",
 		XETH_DEVTYPE_LINUX_UNKNOWN:          "linux",
 		XETH_DEVTYPE_LINUX_VLAN:             "vlan",
 		XETH_DEVTYPE_LINUX_VLAN_BRIDGE_PORT: "vlan-bridge-port",

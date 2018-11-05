@@ -30,11 +30,16 @@ import (
 	"sort"
 )
 
+type NoValue struct{}
+type Associates map[int32]NoValue
+
 type InterfaceEntry struct {
 	Ifinfo
 	EthtoolPrivFlags
 	EthtoolSettings
 	IPNets []*net.IPNet
+	Uppers Associates
+	Lowers Associates
 }
 
 type Ifcache struct {
@@ -139,6 +144,12 @@ func (entry *InterfaceEntry) String() string {
 		fmt.Fprint(buf, " speed ", entry.EthtoolSettings.Speed)
 		fmt.Fprint(buf, " autoneg ", entry.EthtoolSettings.Autoneg)
 	}
+	if entry.Uppers.NotEmpty() {
+		fmt.Fprint(buf, " uppers [", entry.Uppers, "]")
+	}
+	if entry.Lowers.NotEmpty() {
+		fmt.Fprint(buf, " lowers [", entry.Lowers, "]")
+	}
 	for _, ipnet := range entry.IPNets {
 		fmt.Fprint(buf, "\n    ")
 		if ipnet.IP.To4() != nil {
@@ -167,6 +178,21 @@ func (entry *InterfaceEntry) cache(args ...interface{}) {
 			entry.Id = 0
 			entry.Port = -1
 			entry.Subport = -1
+		case *MsgChangeUpper:
+			upper := Interface.Indexed(t.Upper)
+			if entry.Uppers == nil {
+				entry.Uppers = make(Associates)
+			}
+			if upper.Lowers == nil {
+				upper.Lowers = make(Associates)
+			}
+			if t.Linking > 0 {
+				entry.Uppers.Add(t.Upper)
+				upper.Lowers.Add(t.Lower)
+			} else {
+				entry.Uppers.Del(t.Upper)
+				entry.Uppers.Del(t.Lower)
+			}
 		case *MsgIfinfo:
 			entry.dub((*Ifname)(&t.Ifname).String())
 			entry.Link = t.Iflinkindex
@@ -235,4 +261,26 @@ func (entry *InterfaceEntry) dub(name string) {
 		Interface.dir[name] = entry
 	}
 	entry.Name = name
+}
+
+func (associates Associates) NotEmpty() bool {
+	return associates != nil && len(associates) > 0
+}
+
+func (associates Associates) Add(ifindex int32) {
+	associates[ifindex] = NoValue{}
+}
+
+func (associates Associates) Del(ifindex int32) {
+	delete(associates, ifindex)
+}
+
+func (associates Associates) String() string {
+	buf := new(bytes.Buffer)
+	sep := ""
+	for ifindex := range associates {
+		fmt.Fprint(buf, sep, Interface.Indexed(ifindex).Ifinfo.Name)
+		sep = ", "
+	}
+	return buf.String()
 }
