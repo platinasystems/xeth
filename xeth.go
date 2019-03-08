@@ -25,7 +25,7 @@
 package xeth
 
 import (
-	"github.com/platinasystems/xeth/internal/dbgxeth"
+	"github.com/platinasystems/xeth/dbgxeth"
 
 	"fmt"
 	"io"
