@@ -118,14 +118,14 @@ func (kind Kind) cache(buf []byte) {
 		case XETH_IFINFO_REASON_DUMP:
 			Interface.cache(msg.Ifindex, msg)
 		case XETH_IFINFO_REASON_REG:
-			entry, found := Interface.index[msg.Ifindex]
+			entry, found := Interface.index.get(msg.Ifindex)
 			if found {
 				entry.Netns = Netns(msg.Net)
 			} else {
 				Interface.cache(msg.Ifindex, msg)
 			}
 		case XETH_IFINFO_REASON_UNREG:
-			entry, found := Interface.index[msg.Ifindex]
+			entry, found := Interface.index.get(msg.Ifindex)
 			if found {
 				entry.Netns = DefaultNetns
 			}

@@ -25,12 +25,15 @@
 package xeth
 
 import (
+	"github.com/platinasystems/xeth/dbgxeth"
+
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 const netname = "unixpacket"
@@ -38,7 +41,7 @@ const netname = "unixpacket"
 var (
 	Count struct {
 		Tx struct {
-			Sent, Dropped uint64
+			Sent, Dropped, Retried uint64
 		}
 	}
 	// Receive message channel feed from sock by gorx
@@ -74,8 +77,8 @@ func Start(driver string) error {
 	}
 	xeth.rxch = make(chan []byte, 4)
 	xeth.txch = make(chan []byte, 4)
-	Interface.index = make(map[int32]*InterfaceEntry)
-	Interface.dir = make(map[string]*InterfaceEntry)
+	Interface.index.validate()
+	Interface.dir.validate()
 	RxCh = xeth.rxch
 	go gorx()
 	go gotx()
@@ -85,6 +88,7 @@ func Start(driver string) error {
 	UntilBreak(func(buf []byte) error {
 		return nil
 	})
+	dbgxeth.Chan.Log("Done")
 
 	return nil
 }
@@ -107,14 +111,8 @@ func Stop() {
 	}
 	sock.Close()
 	Interface.indexes = Interface.indexes[:0]
-	for ifindex := range Interface.index {
-		delete(Interface.index, ifindex)
-	}
-	Interface.index = nil
-	for name := range Interface.dir {
-		delete(Interface.dir, name)
-	}
-	Interface.dir = nil
+	Interface.index.unsetAll()
+	Interface.dir.unsetAll()
 }
 
 // Return driver name (e.g. "platina-mk1")
@@ -133,6 +131,7 @@ func Carrier(ifindex int32, flag uint8) error {
 
 // Send DumpFib request
 func DumpFib() error {
+	dbgxeth.Chan.Log("DumpFib")
 	buf := Pool.Get(SizeofMsgDumpFibinfo)
 	defer Pool.Put(buf)
 	msg := ToMsg(buf)
@@ -149,6 +148,7 @@ func CacheIfinfo() {
 
 // Send DumpIfinfo request
 func DumpIfinfo() error {
+	dbgxeth.Chan.Log("DumpIfinfo")
 	buf := Pool.Get(SizeofMsgDumpIfinfo)
 	defer Pool.Put(buf)
 	msg := ToMsg(buf)
@@ -194,16 +194,31 @@ func Speed(index int, count uint64) error {
 func Tx(buf []byte) {
 	msg := Pool.Get(len(buf))
 	copy(msg, buf)
-	select {
-	case xeth.txch <- msg:
-		Count.Tx.Sent++
-	default:
-		Count.Tx.Dropped++
-		Pool.Put(msg)
+	kind := KindOf(msg)
+	if kind == XETH_MSG_KIND_CARRIER {
+		wait := true
+		for wait {
+			select {
+			case xeth.txch <- msg:
+				Count.Tx.Sent++
+				wait = false
+			case <-time.After(1 * time.Second):
+				Count.Tx.Retried++
+			}
+		}
+	} else {
+		select {
+		case xeth.txch <- msg:
+			Count.Tx.Sent++
+		default:
+			Count.Tx.Dropped++
+			Pool.Put(msg)
+		}
 	}
 }
 
 func UntilBreak(f func([]byte) error) error {
+	dbgxeth.Chan.Logf("start UntilBreak len(RxCh)=%v", len(RxCh))
 	for buf := range RxCh {
 		if KindOf(buf) == XETH_MSG_KIND_BREAK {
 			Pool.Put(buf)
@@ -258,7 +273,17 @@ func isTimeout(err error) bool {
 	return false
 }
 
+func isEOF(err error) bool {
+	if err != nil {
+		if op, ok := err.(*net.OpError); ok {
+			return op.Err == io.EOF
+		}
+	}
+	return false
+}
+
 func gorx() {
+	dbgxeth.Chan.Log("start")
 	const minrxto = 10 * time.Millisecond
 	const maxrxto = 320 * time.Millisecond
 	rxto := minrxto
@@ -267,6 +292,9 @@ func gorx() {
 	rxoob := Pool.Get(PageSize)
 	defer Pool.Put(rxoob)
 	defer close(xeth.rxch)
+
+	start := time.Now()
+	connected := true
 	for xeth.sock != nil {
 		err := xeth.sock.SetReadDeadline(time.Now().Add(rxto))
 		if err != nil {
@@ -278,9 +306,28 @@ func gorx() {
 		_ = noob
 		_ = flags
 		_ = addr
+		if dbgxeth.Chan > 0 {
+			if isEOF(err) {
+				if connected {
+					LogEvent(fmt.Sprintf("gorx() lost connection to socket"))
+					connected = false
+				}
+			} else {
+				if !connected {
+					LogEvent(fmt.Sprintf("gorx() reconnected to socket"))
+					connected = true
+				}
+			}
+		}
 		if n == 0 || isTimeout(err) {
 			if rxto < maxrxto {
 				rxto *= 2
+			}
+			if dbgxeth.Chan > 0 {
+				if time.Since(start) > 10*time.Second {
+					LogReplace(fmt.Sprintf("RxCh length = %v, read socket timed out for last 10 seconds", len(xeth.rxch)))
+					start = time.Now()
+				}
 			}
 		} else if err == nil {
 			rxto = minrxto
@@ -292,7 +339,21 @@ func gorx() {
 			kind.cache(rxbuf[:n])
 			msg := Pool.Get(n)
 			copy(msg, rxbuf[:n])
-			xeth.rxch <- msg
+			if dbgxeth.Chan > 0 {
+				LogEvent(fmt.Sprintf("From kernel to RxCh (len %v) msg kind: %v", len(xeth.rxch), KindOf(msg)))
+				start = time.Now()
+			}
+			done := false
+			for !done {
+				select {
+				case xeth.rxch <- msg:
+					done = true
+				case <-time.After(1 * time.Second):
+					if dbgxeth.Chan > 0 {
+						LogEvent(fmt.Sprint("wait for chan to free up"))
+					}
+				}
+			}
 		} else {
 			e, ok := err.(*os.SyscallError)
 			if !ok || e.Err.Error() != "EOF" {
@@ -301,9 +362,11 @@ func gorx() {
 			break
 		}
 	}
+	dbgxeth.Chan.Log("quit")
 }
 
 func gotx() {
+	dbgxeth.Chan.Log("start")
 	for msg := range xeth.txch {
 		tx(msg, 10*time.Millisecond)
 		Pool.Put(msg)
@@ -319,10 +382,31 @@ func tx(buf []byte, timeout time.Duration) error {
 	if timeout != time.Duration(0) {
 		dl = time.Now().Add(timeout)
 	}
+	if dbgxeth.Chan > 0 {
+		if KindOf(buf) == XETH_MSG_KIND_CARRIER {
+			updown := "down"
+			ptr := unsafe.Pointer(&buf[0])
+			msg := (*MsgCarrier)(ptr)
+			xethif := Interface.Indexed(msg.Ifindex)
+			ifname := xethif.Ifinfo.Name
+			if msg.Flag > 0 {
+				updown = "up"
+			}
+			LogEvent(fmt.Sprintf("Write to kernel msg %v %v %v", KindOf(buf), ifname, updown))
+		}
+	}
 	err := xeth.sock.SetWriteDeadline(dl)
 	if err != nil {
+		if dbgxeth.Chan > 0 {
+			LogEvent(fmt.Sprintf("SetWriteDeadLine %v error %v", KindOf(buf), err))
+		}
 		return err
 	}
 	_, _, err = xeth.sock.WriteMsgUnix(buf, oob, nil)
+	if dbgxeth.Chan > 0 {
+		if err != nil {
+			LogEvent(fmt.Sprintf("Write to kernel %v error %v", KindOf(buf), err))
+		}
+	}
 	return err
 }

@@ -28,10 +28,14 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 )
 
 type NoValue struct{}
-type Associates map[int32]NoValue
+type Associates struct {
+	mu sync.RWMutex
+	m  map[int32]NoValue
+}
 
 type InterfaceEntry struct {
 	Ifinfo
@@ -42,17 +46,101 @@ type InterfaceEntry struct {
 	Lowers Associates
 }
 
+type ifMap struct {
+	mu    sync.RWMutex
+	index map[int32]*InterfaceEntry
+}
+
+func (i *ifMap) validate() {
+	i.mu.Lock()
+	if i.index == nil {
+		i.index = make(map[int32]*InterfaceEntry)
+	}
+	i.mu.Unlock()
+}
+
+func (i *ifMap) get(ifindex int32) (entry *InterfaceEntry, found bool) {
+	i.mu.RLock()
+	entry, found = i.index[ifindex]
+	i.mu.RUnlock()
+	return
+}
+
+func (i *ifMap) set(ifindex int32, entry *InterfaceEntry) {
+	i.validate()
+	i.mu.Lock()
+	i.index[ifindex] = entry
+	i.mu.Unlock()
+}
+
+func (i *ifMap) unset(ifindex int32) {
+	i.mu.Lock()
+	delete(i.index, ifindex)
+	i.mu.Unlock()
+}
+
+func (i *ifMap) unsetAll() {
+	i.mu.Lock()
+	for ifindex := range i.index {
+		delete(i.index, ifindex)
+	}
+	i.index = nil
+	i.mu.Unlock()
+}
+
+type dirMap struct {
+	mu    sync.RWMutex
+	index map[string]*InterfaceEntry
+}
+
+func (i *dirMap) validate() {
+	i.mu.Lock()
+	if i.index == nil {
+		i.index = make(map[string]*InterfaceEntry)
+	}
+	i.mu.Unlock()
+}
+
+func (i *dirMap) get(name string) (entry *InterfaceEntry, found bool) {
+	i.mu.RLock()
+	entry, found = i.index[name]
+	i.mu.RUnlock()
+	return
+}
+
+func (i *dirMap) set(name string, entry *InterfaceEntry) {
+	i.validate()
+	i.mu.Lock()
+	i.index[name] = entry
+	i.mu.Unlock()
+}
+
+func (i *dirMap) unset(name string) {
+	i.mu.Lock()
+	delete(i.index, name)
+	i.mu.Unlock()
+}
+
+func (i *dirMap) unsetAll() {
+	i.mu.Lock()
+	for name := range i.index {
+		delete(i.index, name)
+	}
+	i.index = nil
+	i.mu.Unlock()
+}
+
 type Ifcache struct {
 	indexes []int32
-	index   map[int32]*InterfaceEntry
+	index   ifMap
 	// only map XETH_DEVTYPE_XETH_PORT by name
-	dir map[string]*InterfaceEntry
+	dir dirMap
 }
 
 var Interface Ifcache
 
 func (c *Ifcache) Indexed(ifindex int32) *InterfaceEntry {
-	if entry, found := c.index[ifindex]; found {
+	if entry, found := c.index.get(ifindex); found {
 		return entry
 	}
 	if p, err := net.InterfaceByIndex(int(ifindex)); err == nil {
@@ -67,19 +155,22 @@ func (c *Ifcache) Iterate(f func(*InterfaceEntry) error) error {
 		return c.indexes[i] < c.indexes[j]
 	})
 	for _, ifindex := range c.indexes {
-		if err := f(c.index[ifindex]); err != nil {
-			return err
+		if entry, found := c.index.get(ifindex); found {
+			if err := f(entry); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (c *Ifcache) Named(name string) *InterfaceEntry {
-	return c.dir[name]
+	entry, _ := c.dir.get(name)
+	return entry
 }
 
 func (c *Ifcache) cache(ifindex int32, args ...interface{}) *InterfaceEntry {
-	entry, found := c.index[ifindex]
+	entry, found := c.index.get(ifindex)
 	if !found {
 		entry = c.newEntry(ifindex)
 	}
@@ -92,8 +183,8 @@ func (c *Ifcache) del(ifindex int32) {
 		if len(entry.IPNets) > 0 {
 			entry.IPNets = entry.IPNets[:0]
 		}
-		delete(c.index, ifindex)
-		delete(c.dir, entry.String())
+		c.index.unset(ifindex)
+		c.dir.unset(entry.String())
 		for i := range c.indexes {
 			if c.indexes[i] == ifindex {
 				copy(c.indexes[i:], c.indexes[i+1:])
@@ -107,7 +198,7 @@ func (c *Ifcache) del(ifindex int32) {
 func (c *Ifcache) newEntry(ifindex int32) *InterfaceEntry {
 	entry := new(InterfaceEntry)
 	entry.Index = ifindex
-	c.index[ifindex] = entry
+	c.index.set(ifindex, entry)
 	c.indexes = append(c.indexes, ifindex)
 	return entry
 }
@@ -180,12 +271,8 @@ func (entry *InterfaceEntry) cache(args ...interface{}) {
 			entry.Subport = -1
 		case *MsgChangeUpper:
 			upper := Interface.Indexed(t.Upper)
-			if entry.Uppers == nil {
-				entry.Uppers = make(Associates)
-			}
-			if upper.Lowers == nil {
-				upper.Lowers = make(Associates)
-			}
+			entry.Uppers.validate()
+			entry.Lowers.validate()
 			if t.Linking > 0 {
 				entry.Uppers.Add(t.Upper)
 				upper.Lowers.Add(t.Lower)
@@ -256,31 +343,57 @@ func (entry *InterfaceEntry) dub(name string) {
 	}
 	if entry.DevType == XETH_DEVTYPE_XETH_PORT {
 		if len(entry.Name) > 0 {
-			delete(Interface.dir, entry.Name)
+			Interface.dir.unset(entry.Name)
 		}
-		Interface.dir[name] = entry
+		Interface.dir.set(name, entry)
 	}
 	entry.Name = name
 }
 
-func (associates Associates) NotEmpty() bool {
-	return associates != nil && len(associates) > 0
+func (associates *Associates) validate() {
+	associates.mu.Lock()
+	if associates.m == nil {
+		associates.m = make(map[int32]NoValue)
+	}
+	associates.mu.Unlock()
 }
 
-func (associates Associates) Add(ifindex int32) {
-	associates[ifindex] = NoValue{}
+func (associates *Associates) NotEmpty() bool {
+	associates.mu.RLock()
+	notEmpty := associates.m != nil && len(associates.m) > 0
+	associates.mu.RUnlock()
+	return notEmpty
 }
 
-func (associates Associates) Del(ifindex int32) {
-	delete(associates, ifindex)
+func (associates *Associates) Add(ifindex int32) {
+	associates.validate()
+	associates.mu.Lock()
+	associates.m[ifindex] = NoValue{}
+	associates.mu.Unlock()
 }
 
-func (associates Associates) String() string {
+func (associates *Associates) Del(ifindex int32) {
+	associates.mu.Lock()
+	delete(associates.m, ifindex)
+	associates.mu.Unlock()
+}
+
+func (associates *Associates) String() string {
 	buf := new(bytes.Buffer)
 	sep := ""
-	for ifindex := range associates {
+	associates.mu.RLock()
+	for ifindex := range associates.m {
 		fmt.Fprint(buf, sep, Interface.Indexed(ifindex).Ifinfo.Name)
 		sep = ", "
 	}
+	associates.mu.RUnlock()
 	return buf.String()
+}
+
+func (associates *Associates) ForeachKey(f func(key int32)) {
+	associates.mu.RLock()
+	for key, _ := range associates.m {
+		f(key)
+	}
+	associates.mu.RUnlock()
 }
