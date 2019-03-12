@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 )
 
@@ -33,13 +34,16 @@ type Netns uint64
 
 const DefaultNetns Netns = 1
 
-var nameByInode = map[Netns]string{
-	1: "default",
-}
+var nameByInode sync.Map
 
 func (ns Netns) String() string {
-	name, found := nameByInode[ns]
-	if found {
+	var name string
+	if v, found := nameByInode.Load(ns); found {
+		return v.(string)
+	}
+	if ns == 1 {
+		name = "default"
+		nameByInode.Store(1, name)
 		return name
 	}
 	filepath.Walk("/run",
@@ -58,7 +62,7 @@ func (ns Netns) String() string {
 			return nil
 		})
 	if len(name) > 0 {
-		nameByInode[ns] = name
+		nameByInode.Store(ns, name)
 		return name
 	}
 	return fmt.Sprintf("%#x", uint64(ns))
