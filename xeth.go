@@ -74,8 +74,6 @@ func Start(driver string) error {
 	}
 	xeth.rxch = make(chan []byte, 4)
 	xeth.txch = make(chan []byte, 4)
-	Interface.index = make(map[int32]*InterfaceEntry)
-	Interface.dir = make(map[string]*InterfaceEntry)
 	RxCh = xeth.rxch
 	go gorx()
 	go gotx()
@@ -107,14 +105,14 @@ func Stop() {
 	}
 	sock.Close()
 	Interface.indexes = Interface.indexes[:0]
-	for ifindex := range Interface.index {
-		delete(Interface.index, ifindex)
-	}
-	Interface.index = nil
-	for name := range Interface.dir {
-		delete(Interface.dir, name)
-	}
-	Interface.dir = nil
+	Interface.byIfindex.Range(func(key, value interface{}) bool {
+		Interface.byIfindex.Delete(key.(int32))
+		return true
+	})
+	Interface.byIfname.Range(func(key, value interface{}) bool {
+		Interface.byIfname.Delete(key.(string))
+		return true
+	})
 }
 
 // Return driver name (e.g. "platina-mk1")

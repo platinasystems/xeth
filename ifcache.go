@@ -1,4 +1,4 @@
-/* Copyright(c) 2018 Platina Systems, Inc.
+/* Copyright(c) 2018-2019 Platina Systems, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -26,12 +26,18 @@ package xeth
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"sort"
+	"sync"
 )
 
 type NoValue struct{}
-type Associates map[int32]NoValue
+
+type Associates struct {
+	sync.Map
+	count uint
+}
 
 type InterfaceEntry struct {
 	Ifinfo
@@ -43,17 +49,17 @@ type InterfaceEntry struct {
 }
 
 type Ifcache struct {
-	indexes []int32
-	index   map[int32]*InterfaceEntry
+	indexes   []int32
+	byIfindex sync.Map
 	// only map XETH_DEVTYPE_XETH_PORT by name
-	dir map[string]*InterfaceEntry
+	byIfname sync.Map
 }
 
 var Interface Ifcache
 
 func (c *Ifcache) Indexed(ifindex int32) *InterfaceEntry {
-	if entry, found := c.index[ifindex]; found {
-		return entry
+	if v, found := c.byIfindex.Load(ifindex); found {
+		return v.(*InterfaceEntry)
 	}
 	if p, err := net.InterfaceByIndex(int(ifindex)); err == nil {
 		return c.cache(int32(p.Index), p)
@@ -67,20 +73,27 @@ func (c *Ifcache) Iterate(f func(*InterfaceEntry) error) error {
 		return c.indexes[i] < c.indexes[j]
 	})
 	for _, ifindex := range c.indexes {
-		if err := f(c.index[ifindex]); err != nil {
-			return err
+		if v, found := c.byIfindex.Load(ifindex); found {
+			if err := f(v.(*InterfaceEntry)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (c *Ifcache) Named(name string) *InterfaceEntry {
-	return c.dir[name]
+func (c *Ifcache) Named(ifname string) *InterfaceEntry {
+	if v, found := c.byIfname.Load(ifname); found {
+		return v.(*InterfaceEntry)
+	}
+	return nil
 }
 
 func (c *Ifcache) cache(ifindex int32, args ...interface{}) *InterfaceEntry {
-	entry, found := c.index[ifindex]
-	if !found {
+	var entry *InterfaceEntry
+	if v, found := c.byIfindex.Load(ifindex); found {
+		entry = v.(*InterfaceEntry)
+	} else {
 		entry = c.newEntry(ifindex)
 	}
 	entry.cache(args...)
@@ -92,8 +105,8 @@ func (c *Ifcache) del(ifindex int32) {
 		if len(entry.IPNets) > 0 {
 			entry.IPNets = entry.IPNets[:0]
 		}
-		delete(c.index, ifindex)
-		delete(c.dir, entry.String())
+		c.byIfindex.Delete(ifindex)
+		c.byIfname.Delete(entry.String())
 		for i := range c.indexes {
 			if c.indexes[i] == ifindex {
 				copy(c.indexes[i:], c.indexes[i+1:])
@@ -107,7 +120,7 @@ func (c *Ifcache) del(ifindex int32) {
 func (c *Ifcache) newEntry(ifindex int32) *InterfaceEntry {
 	entry := new(InterfaceEntry)
 	entry.Index = ifindex
-	c.index[ifindex] = entry
+	c.byIfindex.Store(ifindex, entry)
 	c.indexes = append(c.indexes, ifindex)
 	return entry
 }
@@ -145,10 +158,14 @@ func (entry *InterfaceEntry) String() string {
 		fmt.Fprint(buf, " autoneg ", entry.EthtoolSettings.Autoneg)
 	}
 	if entry.Uppers.NotEmpty() {
-		fmt.Fprint(buf, " uppers [", entry.Uppers, "]")
+		fmt.Fprint(buf, " uppers [")
+		entry.Uppers.WriteTo(buf)
+		fmt.Fprint(buf, "]")
 	}
 	if entry.Lowers.NotEmpty() {
-		fmt.Fprint(buf, " lowers [", entry.Lowers, "]")
+		fmt.Fprint(buf, " lowers [")
+		entry.Lowers.WriteTo(buf)
+		fmt.Fprint(buf, "]")
 	}
 	for _, ipnet := range entry.IPNets {
 		fmt.Fprint(buf, "\n    ")
@@ -180,12 +197,6 @@ func (entry *InterfaceEntry) cache(args ...interface{}) {
 			entry.Subport = -1
 		case *MsgChangeUpper:
 			upper := Interface.Indexed(t.Upper)
-			if entry.Uppers == nil {
-				entry.Uppers = make(Associates)
-			}
-			if upper.Lowers == nil {
-				upper.Lowers = make(Associates)
-			}
 			if t.Linking > 0 {
 				entry.Uppers.Add(t.Upper)
 				upper.Lowers.Add(t.Lower)
@@ -256,31 +267,38 @@ func (entry *InterfaceEntry) dub(name string) {
 	}
 	if entry.DevType == XETH_DEVTYPE_XETH_PORT {
 		if len(entry.Name) > 0 {
-			delete(Interface.dir, entry.Name)
+			Interface.byIfname.Delete(entry.Name)
 		}
-		Interface.dir[name] = entry
+		Interface.byIfname.Store(name, entry)
 	}
 	entry.Name = name
 }
 
-func (associates Associates) NotEmpty() bool {
-	return associates != nil && len(associates) > 0
+func (associates *Associates) NotEmpty() bool {
+	return associates.count > 0
 }
 
-func (associates Associates) Add(ifindex int32) {
-	associates[ifindex] = NoValue{}
+func (associates *Associates) Add(ifindex int32) {
+	associates.Store(ifindex, NoValue{})
+	associates.count += 1
 }
 
-func (associates Associates) Del(ifindex int32) {
-	delete(associates, ifindex)
+func (associates *Associates) Del(ifindex int32) {
+	associates.Delete(ifindex)
+	associates.count -= 1
 }
 
-func (associates Associates) String() string {
-	buf := new(bytes.Buffer)
-	sep := ""
-	for ifindex := range associates {
-		fmt.Fprint(buf, sep, Interface.Indexed(ifindex).Ifinfo.Name)
+func (associates *Associates) WriteTo(w io.Writer) (int64, error) {
+	var n int64
+	var sep string
+	associates.Range(func(key, value interface{}) bool {
+		ifindex := key.(int32)
+		ifname := Interface.Indexed(ifindex).Ifinfo.Name
+		fmt.Fprint(w, sep, ifname)
+		n += int64(len(ifname))
+		n += int64(len(sep))
 		sep = ", "
-	}
-	return buf.String()
+		return true
+	})
+	return n, nil
 }
