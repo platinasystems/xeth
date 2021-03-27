@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+# See debhelper(7) (uncomment to enable)
+# output every command that modifies files on the build system.
+#export DH_VERBOSE = 1
+
+include /usr/share/dpkg/default.mk
+
+DEBVERS := $(shell dpkg-parsechangelog | grep ^Version: | cut -d' ' -f2 \
+	   | cut -d- -f1)
+VERSION := $(shell echo '$(DEBVERS)' | sed -e 's/[+-].*//' -e 's/~//g')
+
+DESTDIR := $(CURDIR)/debian/xeth/usr/src/xeth-$(VERSION)
+
+override_dh_dkms:
+	dh_dkms -V $(VERSION)
+
+override_dh_auto_install:
+	install -d $(DESTDIR)
+	cp src/* $(DESTDIR)
+
+%:
+	dh $@ --with dkms

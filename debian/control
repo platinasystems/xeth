@@ -1,0 +1,16 @@
+Source: xeth
+Section: net
+Priority: optional
+Maintainer: Kevin Paul Herbert <kph@platinasystems.com>
+Build-Depends: debhelper (>=10), dkms
+Standards-Version: 3.9.8
+Homepage: https://platinasystems.com
+Vcs-Browser: https://github.com/platinasystems/xeth
+Vcs-Git: https://github.com/platinasystems/xeth.git
+
+Package: xeth
+Architecture: any
+Depends: ${misc:Depends}, libelf-dev, build-essential
+Description: Platina Systems mux driver
+ Kernel mux device driver for xeth.
+
