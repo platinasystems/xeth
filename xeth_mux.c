@@ -1398,8 +1398,10 @@ static ssize_t xeth_mux_link_addrs(struct platform_device *pd,
 	for (l = 0; l < a; l++)
 		if (!links[l]) {
 			for (l = 0; l < a; l++) {
-				dev_put(links[l]);
-				links[l] = NULL;
+				if (links[l]) {
+					dev_put(links[l]);
+					links[l] = NULL;
+				}
 			}
 			return -EPROBE_DEFER;
 		}
