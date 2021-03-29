@@ -16,7 +16,7 @@ override_dh_dkms:
 
 override_dh_auto_install:
 	install -d $(DESTDIR)
-	cp src/* $(DESTDIR)
+	cp src/Makefile src/*.[ch] $(DESTDIR)
 
 %:
 	dh $@ --with dkms
