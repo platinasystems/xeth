@@ -1,3 +1,15 @@
+*.patch
+*.orig
+*~
+\#*#
+*.[oa]
+*.ko
+*.cmd
+*.symvers
+*.builtin
+*.order
+*.mod
+*.mod.c
 /debian/debhelper-build-stamp
 /debian/files
 /debian/xeth.debhelper.log
@@ -6,3 +18,4 @@
 /debian/xeth.prerm.debhelper
 /debian/xeth.substvars
 /debian/xeth/
+/src/modules.order
