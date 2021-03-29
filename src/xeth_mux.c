@@ -316,7 +316,7 @@ void xeth_mux_add_proxy(struct xeth_proxy *proxy)
 {
 	struct xeth_mux_priv *priv = netdev_priv(proxy->mux);
 	unsigned bkt;
-	
+
 	bkt = hash_min(proxy->xid, xeth_mux_proxy_hash_bits);
 	xeth_mux_lock_proxy(priv);
 	hlist_add_head_rcu(&proxy->node, &priv->proxy.hls[bkt]);
@@ -656,7 +656,7 @@ struct xeth_sbtxb *xeth_mux_alloc_sbtxb(struct net_device *mux, size_t len)
 	struct xeth_mux_priv *priv = netdev_priv(mux);
 	struct xeth_sbtxb *sbtxb, *tmp;
 	size_t sz;
-	
+
 	xeth_mux_lock_sb(priv);
 	list_for_each_entry_safe(sbtxb, tmp, &priv->sb.free, list)
 		if (sbtxb->sz >= len) {
@@ -1605,7 +1605,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 	sz = sizeof(*priv) + (n_ppds * sizeof(struct platform_device *));
 	mux = alloc_netdev_mqs(sz, ifname, NET_NAME_ENUM,
 			       xeth_mux_setup,
-			       xeth_mux_qs_prop(pd, "txqs"), 
+			       xeth_mux_qs_prop(pd, "txqs"),
 			       xeth_mux_qs_prop(pd, "rxqs"));
 	if (!mux) {
 		for (--n_links; n_links >= 0 && links[n_links]; --n_links)

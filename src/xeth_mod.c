@@ -25,7 +25,7 @@ static struct platform_driver * const xeth_mod_drivers[] = {
 static struct rtnl_link_ops * const xeth_mod_lnkos[] = {
 	/*
 	 * list bridge before lag and vlan to release all these lowers
-	 * before the upper bridge 
+	 * before the upper bridge
 	 */
 	&xeth_bridge_lnko,
 	&xeth_lag_lnko,

@@ -164,7 +164,7 @@ enum xeth_msg_ifinfo_reason {
 
 struct xeth_msg_header {
 	uint64_t z64;
-	uint32_t z32;	
+	uint32_t z32;
 	uint16_t z16;
 	uint8_t version;
 	uint8_t kind;
