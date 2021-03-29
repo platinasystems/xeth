@@ -11,3 +11,5 @@ bindeb-pkg:
 
 .PHONY: default bindeb-pkg
 
+src/xeth.ko:
+	$(MAKE) -C src
