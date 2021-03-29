@@ -12,7 +12,6 @@
 
 #include <linux/atomic.h>
 #include <linux/if_link.h>
-#include "xeth.h"
 
 static inline void xeth_link_stat_init(atomic64_t *t)
 {

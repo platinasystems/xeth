@@ -15,6 +15,10 @@ xeth-y += xeth_sbrx.o
 xeth-y += xeth_sbtx.o
 xeth-y += xeth_qsfp.o
 
+xeth-srctree-uapi := $(srctree)/include/uapi/linux/xeth.h
+xeth-uapi := $(or $(wildcard $(src)/xeth_uapi.h),$(xeth-srctree-uapi))
+ccflags-y += --include=$(xeth-uapi)
+
 else
 KDIR ?= /lib/modules/`uname -r`/build
 
