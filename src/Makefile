@@ -23,7 +23,7 @@ else
 KDIR ?= /lib/modules/`uname -r`/build
 
 xeth-kmod:
-	$(MAKE) -C $(KDIR) M=$$PWD
+	$(MAKE) -C $(KDIR) M=$(CURDIR)
 
 clean:
 	rm -f *.o *.a *.cmd *.ko .xeth*.cmd Module.symvers modules.order
