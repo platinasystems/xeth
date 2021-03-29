@@ -26,7 +26,8 @@ xeth-kmod:
 	$(MAKE) -C $(KDIR) M=$$PWD
 
 clean:
-	rm -f *.o *.a *.cmd *.ko .xeth*.cmd Module.symvers modules.order xeth.mod xeth.mod.c
+	rm -f *.o *.a *.cmd *.ko .xeth*.cmd Module.symvers modules.order
+	rm -f xeth.mod xeth.mod.c
 
 .PHONY: xeth-kmod clean
 
