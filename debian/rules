@@ -9,18 +9,11 @@ DEBVERS := $(shell dpkg-parsechangelog | grep ^Version: | cut -d' ' -f2 \
 	   | cut -d- -f1)
 VERSION := $(shell echo '$(DEBVERS)' | sed -e 's/[+-].*//' -e 's/~//g')
 
-DESTDIR := $(CURDIR)/debian/xeth/usr/src/xeth-$(VERSION)
-
-modsrc := $(filter-out %.mod.c,$(wildcard src/*.c))
-modsrc += $(wildcard src/*.h)
-modsrc += src/Makefile
+export VERSION
+export DESTDIR=$(CURDIR)/debian/xeth
 
 override_dh_dkms:
 	dh_dkms -V $(VERSION)
-
-override_dh_auto_install:
-	install -d $(DESTDIR)
-	cp $(modsrc) $(DESTDIR)
 
 %:
 	dh $@ --with dkms
