@@ -22,13 +22,11 @@ ccflags-y += --include=$(xeth-uapi)
 else
 KDIR ?= /lib/modules/`uname -r`/build
 
-xeth-kmod:
-	$(MAKE) -C $(KDIR) M=$(CURDIR)
+modules:
+	$(Q)$(MAKE) -C $(KDIR) M=$(CURDIR) $@
 
-clean:
-	rm -f *.o *.a *.cmd *.ko .xeth*.cmd Module.symvers modules.order
-	rm -f xeth.mod xeth.mod.c
+.PHONY: modules
 
-.PHONY: xeth-kmod clean
+%: ; $(Q)$(MAKE) -C $(KDIR) M=$(CURDIR) $@
 
 endif
