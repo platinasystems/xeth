@@ -1,10 +1,15 @@
 ifeq ($(or $(V), $(DH_VERBOSE)),)
-Q = @
-MAKEFLAGS += --no-print-directory
+	Q = @
+	MAKEFLAGS += --no-print-directory
 endif
 
 # subject, verb, object(s)
 svo = $(if $(Q),$(info $1 $3))$(Q)$2 $3
+
+KDIR ?= $(wildcard /lib/modules/$(shell uname -r)/build)
+ifneq ($(KDIR),)
+	mk-src = $(call svo, SRC, $(MAKE) -C src Q=$(Q) KDIR=$(KDIR), $@)
+endif
 
 install: docs := README.md
 install: docs-dest := $(DESTDIR)/usr/share/doc/xeth
@@ -37,7 +42,7 @@ bindeb-pkg:
 	$(call svo, DEBUILD, debuild -uc -us --lintian-opts --profile debian)
 
 clean:
-	$(Q)$(MAKE) -C src Q=$(Q) $@
+	$(mk-src)
 	$(clean)
 
 distclean:
@@ -49,7 +54,7 @@ install:
 	$(install)
 
 modules:
-	$(Q)$(MAKE) -C src Q=$(Q) $@
+	$(mk-src)
 
 .PHONY: default bindeb-pkg clean distclean docs install modules
 
