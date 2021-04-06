@@ -1,0 +1,3 @@
+debian/install
+debian/.debhelper/
+debian/xeth-dkms/

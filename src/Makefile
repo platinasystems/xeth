@@ -1,5 +1,3 @@
-ifneq ($(KERNELRELEASE),)
-
 obj-m += xeth.o
 
 xeth-y := xeth_mod.o
@@ -19,14 +17,11 @@ xeth-srctree-uapi := $(srctree)/include/uapi/linux/xeth.h
 xeth-uapi := $(or $(wildcard $(src)/xeth_uapi.h),$(xeth-srctree-uapi))
 ccflags-y += --include=$(xeth-uapi)
 
-else
-KDIR ?= /lib/modules/`uname -r`/build
+KERNELRELEASE ?= $(shell uname -r)
+MODLIB = $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
+KDIR ?= $(MODLIB)/build
 
-modules:
-	$(Q)$(MAKE) -C $(KDIR) M=$(CURDIR) $@
+modules modules_install clean:
+	$(if $(wildcard $(KDIR)),$(MAKE) -C $(KDIR) M=$(CURDIR) $@,true)
 
-.PHONY: modules
-
-%: ; $(Q)$(MAKE) -C $(KDIR) M=$(CURDIR) $@
-
-endif
+.PHONY: clean modules modules_install

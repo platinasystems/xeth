@@ -8,7 +8,7 @@ Homepage: https://platinasystems.com
 Vcs-Browser: https://github.com/platinasystems/xeth
 Vcs-Git: https://github.com/platinasystems/xeth.git
 
-Package: xeth
+Package: xeth-dkms
 Architecture: all
 Depends: ${misc:Depends}, libelf-dev, build-essential
 Description: Platina Systems mux driver
