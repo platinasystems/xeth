@@ -9,7 +9,7 @@ Vcs-Browser: https://github.com/platinasystems/xeth
 Vcs-Git: https://github.com/platinasystems/xeth.git
 
 Package: xeth
-Architecture: any
+Architecture: all
 Depends: ${misc:Depends}, libelf-dev, build-essential
 Description: Platina Systems mux driver
  Kernel mux device driver for xeth.
