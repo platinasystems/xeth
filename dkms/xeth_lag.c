@@ -167,7 +167,7 @@ static void xeth_lag_get_drvinfo(struct net_device *lag,
 {
 	struct xeth_lag_priv *priv = netdev_priv(lag);
 	strlcpy(drvinfo->driver, xeth_lag_drvname, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, XETH_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->version, xeth_version, sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "n/a", ETHTOOL_FWVERS_LEN);
 	strlcpy(drvinfo->erom_version, "n/a", ETHTOOL_EROMVERS_LEN);
 	scnprintf(drvinfo->bus_info, ETHTOOL_BUSINFO_LEN,

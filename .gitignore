@@ -21,3 +21,4 @@ modules.order
 /debian/xeth-dkms.prerm.debhelper
 /debian/xeth-dkms.substvars
 /debian/xeth-dkms/
+/dkms/xeth_version.mk

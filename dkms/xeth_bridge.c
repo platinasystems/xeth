@@ -155,7 +155,7 @@ static void xeth_bridge_get_drvinfo(struct net_device *br,
 {
 	struct xeth_bridge_priv *priv = netdev_priv(br);
 	strlcpy(drvinfo->driver, xeth_bridge_drvname, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, XETH_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->version, xeth_version, sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "n/a", ETHTOOL_FWVERS_LEN);
 	strlcpy(drvinfo->erom_version, "n/a", ETHTOOL_EROMVERS_LEN);
 	scnprintf(drvinfo->bus_info, ETHTOOL_BUSINFO_LEN,

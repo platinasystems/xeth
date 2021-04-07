@@ -7,8 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#if !defined(XETH_VERSION)
-#define XETH_VERSION "undefined"
-#endif
+#include "xeth_version.h"
 
-extern const char xeth_version[];
+const char xeth_version[] = XETH_VERSION;

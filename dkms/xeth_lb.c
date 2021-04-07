@@ -65,7 +65,7 @@ static void xeth_lb_get_drvinfo(struct net_device *nd,
 {
 	struct xeth_lb_priv *priv = netdev_priv(nd);
 	strlcpy(drvinfo->driver, xeth_lb_drvname, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, XETH_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->version, xeth_version, sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "n/a", ETHTOOL_FWVERS_LEN);
 	strlcpy(drvinfo->erom_version, "n/a", ETHTOOL_EROMVERS_LEN);
 	scnprintf(drvinfo->bus_info, ETHTOOL_BUSINFO_LEN, "%u:%u",

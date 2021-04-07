@@ -12,10 +12,16 @@ xeth-y += xeth_nb.o
 xeth-y += xeth_sbrx.o
 xeth-y += xeth_sbtx.o
 xeth-y += xeth_qsfp.o
+xeth-y += xeth_version.o
 
 xeth-srctree-uapi := $(srctree)/include/uapi/linux/xeth.h
 xeth-uapi := $(or $(wildcard $(src)/xeth_uapi.h),$(xeth-srctree-uapi))
 ccflags-y += --include=$(xeth-uapi)
+
+-include $(src)/xeth_version.mk
+ifneq ($(XETH_VERSION),)
+ccflags-y += -DXETH_VERSION=\"$(XETH_VERSION)\"
+endif
 
 KERNELRELEASE ?= $(shell uname -r)
 MODLIB = $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)

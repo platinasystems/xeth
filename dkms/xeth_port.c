@@ -140,7 +140,7 @@ static void xeth_port_get_drvinfo(struct net_device *nd,
 	struct xeth_port_priv *priv = netdev_priv(nd);
 
 	strlcpy(drvinfo->driver, xeth_port_drvname, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, XETH_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->version, xeth_version, sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "n/a", ETHTOOL_FWVERS_LEN);
 	strlcpy(drvinfo->erom_version, "n/a", ETHTOOL_EROMVERS_LEN);
 	drvinfo->n_priv_flags = xeth_mux_n_priv_flags(priv->proxy.mux);
@@ -155,7 +155,7 @@ static void xeth_subport_get_drvinfo(struct net_device *nd,
 	struct xeth_port_priv *priv = netdev_priv(nd);
 
 	strlcpy(drvinfo->driver, xeth_port_drvname, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, XETH_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->version, xeth_version, sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "n/a", ETHTOOL_FWVERS_LEN);
 	strlcpy(drvinfo->erom_version, "n/a", ETHTOOL_EROMVERS_LEN);
 	drvinfo->n_priv_flags = 0;

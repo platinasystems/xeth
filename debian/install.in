@@ -1,5 +1,6 @@
 README.md usr/share/doc/xeth-dkms/
 figures/*.svg usr/share/doc/xeth-dkms/figures/
 dkms/Makefile usr/src/xeth-DEB_VERSION_UPSTREAM/
+dkms/*.mk usr/src/xeth-DEB_VERSION_UPSTREAM/
 dkms/*.c usr/src/xeth-DEB_VERSION_UPSTREAM/
 dkms/*.h usr/src/xeth-DEB_VERSION_UPSTREAM/
