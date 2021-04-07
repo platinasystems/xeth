@@ -15,8 +15,8 @@ define debuild
 $(call svo, DEBUILD, debuild -uc -us --lintian-opts --profile debian)
 endef
 
-define mk-src
-$(call svo, SRC, $(MAKE) -C src $(if $(KDIR),KDIR=$(KDIR)), $@)
+define mk-dkms
+$(call svo, DKMS, $(MAKE) -C dkms $(if $(KDIR),KDIR=$(KDIR)), $@)
 endef
 
 default:
@@ -25,12 +25,12 @@ bindeb-pkg: ; $(debuild)
 
 clean: files = $(wildcard README.html)
 clean:
-	$(mk-src)
+	$(mk-dkms)
 	$(clean)
 
 docs: README.html
 
-modules modules_install: ; $(mk-src)
+modules modules_install: ; $(mk-dkms)
 
 .PHONY: default bindeb-pkg clean docs modules modules_install
 

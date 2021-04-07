@@ -176,4 +176,4 @@ After the BREAK reply to the DUMP_FIBINFO request, the mux continues sending\
 FIB and interface updates while the daemon or switch driver relays\
 negotiated port speed, carrier state, and periodic stats.
 
-See [src/xeth_uapi.h](src/xeth_uapi.h) for message definitions.
+See [dkms/xeth_uapi.h](dkms/xeth_uapi.h) for message definitions.
