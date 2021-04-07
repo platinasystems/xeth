@@ -1,3 +1,29 @@
+xeth (3.0.1) stretch; urgency=medium
+
+  * fix debuild artifacts
+  * alternate missing link-addr recovery
+  * rename src/xeth.h to src/xeth_uapi.h
+  * only stage module src and Makefile
+  * add src/xeth.ko target for developer builds
+  * style: <=80 columns
+  * style: remove trailing whitespace
+  * use CURDIR instead of PWD
+  * ignore developer build artifacts
+  * mv Kconfig to src
+  * filter module build artifacts from staged src
+  * Revert "add src/xeth.ko target for developer builds"
+  * add README and its figures
+  * src: use modules target and kernel clean rules
+  * replace debian/rules install overrides
+  * skip SRC makes if KDIR does not exist
+  * Architecture all instead of any
+  * rename package to xeth-dkms
+  * rename src to dkms
+  * set module version to DEB_VERSION_UPSTREAM
+  * debian/control: add Uploaders
+
+ -- Tom Grennan <tgrennan@platinasystems.com>  Wed, 07 Apr 2021 13:32:26 -0700
+
 xeth (0.0.1) stretch; urgency=medium
 
   Initial commit.
