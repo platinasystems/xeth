@@ -20,3 +20,4 @@
 /dkms/xeth.mod
 /dkms/xeth.mod.c
 /dkms/xeth_version.mk
+/go/xeth/_obj/

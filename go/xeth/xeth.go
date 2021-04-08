@@ -69,8 +69,8 @@ import (
 	"github.com/platinasystems/xeth/go/xeth/internal"
 )
 
-//go:generate sh -c "go tool cgo -godefs godefs.go > godefed.go"
-//go:generate sh -c "go tool cgo -godefs internal/godefs.go > internal/godefed.go"
+//go:generate sh godef.sh godefs.go godefed.go
+//go:generate sh godef.sh internal/godefs.go internal/godefed.go
 
 const unixpacket = "unixpacket"
 

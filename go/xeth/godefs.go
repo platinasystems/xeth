@@ -5,11 +5,11 @@ package xeth
 /*
 #include <stdint.h>
 #include <linux/types.h>
-#include <linux/netdev_features.h>
 #include <errno.h>
 typedef int bool;
 typedef uint64_t u64;
 #include "xeth_uapi.h"
+#include "netdev_features.h"
 */
 import "C"
 
