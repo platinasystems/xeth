@@ -1,6 +1,16 @@
-ifeq ($(or $(V), $(DH_VERBOSE)),)
+ifneq ($(DH_VERBOSE),)
+	V ?= 1
+endif
+
+ifneq ($(V),)
+	MAKEFLAGS += V=$(V)
+else
 	Q = @
 	MAKEFLAGS += --no-print-directory
+endif
+
+ifneq ($(KDIR),)
+	MAKEFLAGS += KDIR=$(KDIR)
 endif
 
 # subject, verb, object(s)
@@ -16,7 +26,7 @@ $(call svo, DEBUILD, debuild -uc -us --lintian-opts --profile debian)
 endef
 
 define mk-dkms
-$(call svo, DKMS, $(MAKE) -C dkms $(if $(KDIR),KDIR=$(KDIR)), $@)
+$(call svo, DKMS, $(MAKE) -C dkms, $@)
 endef
 
 default:
