@@ -66,7 +66,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/platinasystems/xeth/go/xeth/internal"
+	"github.com/platinasystems/xeth/v3/go/xeth/internal"
 )
 
 //go:generate sh godef.sh godefs.go godefed.go

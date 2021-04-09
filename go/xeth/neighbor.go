@@ -10,7 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/platinasystems/xeth/go/xeth/internal"
+	"github.com/platinasystems/xeth/v3/go/xeth/internal"
 )
 
 type Neighbor struct {

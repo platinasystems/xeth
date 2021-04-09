@@ -4,7 +4,7 @@
 
 package xeth
 
-import "github.com/platinasystems/xeth/go/xeth/internal"
+import "github.com/platinasystems/xeth/v3/go/xeth/internal"
 
 type AutoNeg uint8
 type Duplex uint8
