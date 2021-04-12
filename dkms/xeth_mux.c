@@ -1688,16 +1688,15 @@ static int xeth_mux_remove(struct platform_device *pd)
 	priv = netdev_priv(mux);
 	platform_set_drvdata(pd, NULL);
 
+	for (i = 0; i < priv->n_ppds; i++)
+		if (priv->ppds[i])
+			platform_device_unregister(priv->ppds[i]);
+
 	rtnl_lock();
 	xeth_mux_lnko.dellink(mux, &q);
 	unregister_netdevice_many(&q);
 	rtnl_unlock();
 	rcu_barrier();
-
-	for (i = 0; i < priv->n_ppds; i++)
-		if (priv->ppds[i])
-			platform_device_unregister(priv->ppds[i]);
-
 	return 0;
 }
 
