@@ -7,6 +7,7 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
+#include "xeth_rtnl.h"
 #include "xeth_mux.h"
 #include "xeth_link_stat.h"
 #include "xeth_nb.h"
@@ -1588,6 +1589,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 	int i, err;
 	void (*mk_ppds)(struct platform_device *pd, struct net_device *mux);
 
+	rtnl_lock();
 	if (xeth_mux_is_platina_mk1(pd)) {
 		n_ppds = 32;
 		mk_ppds = xeth_mux_mk_platina_mk1_ppds;
@@ -1600,7 +1602,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 	if (n_links == 0)
 		n_links = xeth_mux_link_akas(pd, links);
 	if (n_links < 0)
-		return n_links;
+		return xeth_rtnl_unlock(n_links);
 	else if (n_links == 0)
 		xeth_debug("no links?");
 
@@ -1614,7 +1616,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 	if (!mux) {
 		for (--n_links; n_links >= 0 && links[n_links]; --n_links)
 			dev_put(links[n_links]);
-		return -ENOMEM;
+		return xeth_rtnl_unlock(-ENOMEM);
 	}
 
 	priv = netdev_priv(mux);
@@ -1633,34 +1635,24 @@ static int xeth_mux_probe(struct platform_device *pd)
 	else
 		eth_hw_addr_random(mux);
 
-	rtnl_lock();
-	err = xeth_debug_err(register_netdevice(mux));
-	rtnl_unlock();
-
-	if (err < 0) {
+	if (err = xeth_debug_err(register_netdevice(mux)), err < 0) {
 		for (--n_links; n_links >= 0 && links[n_links]; --n_links)
 			dev_put(links[n_links]);
 		free_netdev(mux);
-		return err;
+		return xeth_rtnl_unlock(err);
 	}
 
 	if (!priv->stat_name.named) {
 		err = device_create_file(&mux->dev, &xeth_mux_stat_name_attr);
 		if (!err)
 			priv->stat_name.sysfs = true;
+		else
+			pr_err("create %s/stat-name: %d\n", mux->name, err);
 	}
 
-	if (n_links > 0) {
-		rtnl_lock();
-		for (i = 0, err = 0; i < n_links && !err; i++) {
-			err = xeth_mux_add_lower(mux, links[i], NULL);
-			if (err)
-				pr_err("link %s: %d\n", links[i]->name, err);
-			else
-				xeth_debug("linked %s", links[i]->name);
-		}
-		rtnl_unlock();
-	}
+	for (i = 0, err = 0; i < n_links; i++)
+		if (err = xeth_mux_add_lower(mux, links[i], NULL), err)
+			pr_err("link %s: %d\n", links[i]->name, err);
 
 	priv->main = kthread_run(xeth_mux_main, mux, "%s", mux->name);
 
@@ -1680,7 +1672,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 		mk_ppds(pd, mux);
 	}
 
-	return 0;
+	return xeth_rtnl_unlock(0);
 }
 
 static int xeth_mux_remove(struct platform_device *pd)
