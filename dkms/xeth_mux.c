@@ -1564,7 +1564,7 @@ static void xeth_mux_mk_platina_mk1_ppds(struct platform_device *pd,
 		props[port][2].value.u8_data = bus[priv->base_port][port];
 
 		info[port].name = "xeth-port";
-		info[port].id = port + priv->base_port;
+		info[port].id = port;
 		info[port].properties = props[port];
 
 		ppd = platform_device_register_full(&info[port]);
