@@ -9,11 +9,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_nb.h"
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_sbtx.h"
-#include "xeth_debug.h"
 #include <net/ip_fib.h>
 
 static int xeth_nb_fib(struct notifier_block *fib,
@@ -25,7 +20,7 @@ static int xeth_nb_fib(struct notifier_block *fib,
 
 	if (fib->notifier_call != xeth_nb_fib)
 		return NOTIFY_DONE;
-	if (nb = xeth_debug_container_of(fib, struct xeth_nb, fib), IS_ERR(nb))
+	if (nb = xeth_container_of(fib, struct xeth_nb, fib), IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
 		return NOTIFY_DONE;
@@ -59,7 +54,7 @@ static int xeth_nb_fib(struct notifier_block *fib,
 	case FIB_EVENT_VIF_DEL:
 		break;
 	default:
-		pr_err("%s: unknown fib event: %ld", __func__, event);
+		xeth_err("unknown fib event: %ld", event);
 	}
 	return NOTIFY_DONE;
 }
@@ -74,7 +69,7 @@ static int xeth_nb_inetaddr(struct notifier_block *inetaddr,
 
 	if (inetaddr->notifier_call != xeth_nb_inetaddr)
 		return NOTIFY_DONE;
-	nb = xeth_debug_container_of(inetaddr, struct xeth_nb, inetaddr);
+	nb = xeth_container_of(inetaddr, struct xeth_nb, inetaddr);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -98,7 +93,7 @@ static int xeth_nb_inet6addr(struct notifier_block *inet6addr,
 
 	if (inet6addr->notifier_call != xeth_nb_inet6addr)
 		return NOTIFY_DONE;
-	nb = xeth_debug_container_of(inet6addr, struct xeth_nb, inet6addr);
+	nb = xeth_container_of(inet6addr, struct xeth_nb, inet6addr);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -121,7 +116,7 @@ static int xeth_nb_netdevice(struct notifier_block *netdevice,
 
 	if (netdevice->notifier_call != xeth_nb_netdevice)
 		return NOTIFY_DONE;
-	nb = xeth_debug_container_of(netdevice, struct xeth_nb, netdevice);
+	nb = xeth_container_of(netdevice, struct xeth_nb, netdevice);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	mux = xeth_mux_of_nb(nb);
@@ -183,7 +178,7 @@ static int xeth_nb_netevent(struct notifier_block *netevent,
 
 	if (netevent->notifier_call != xeth_nb_netevent)
 		return NOTIFY_DONE;
-	nb = xeth_debug_container_of(netevent, struct xeth_nb, netevent);
+	nb = xeth_container_of(netevent, struct xeth_nb, netevent);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -198,10 +193,10 @@ static int xeth_nb_netevent(struct notifier_block *netevent,
 
 static void xeth_mux_fib_cb(struct notifier_block *fib)
 {
-	struct xeth_nb *nb = xeth_debug_container_of(fib, struct xeth_nb, fib);
+	struct xeth_nb *nb = xeth_container_of(fib, struct xeth_nb, fib);
 	struct net_device *mux = xeth_mux_of_nb(nb);
 	if (!IS_ERR(mux))
-		xeth_debug_nd(mux, "registered fib notifier");
+		xeth_nd_debug(mux, "registered fib notifier");
 }
 
 #define xeth_nb_register_fib(NB) register_fib_notifier(NB, xeth_mux_fib_cb)

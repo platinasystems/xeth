@@ -7,12 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_proxy.h"
-#include "xeth_mux.h"
-#include "xeth_port.h"
-#include "xeth_sbtx.h"
-#include "xeth_debug.h"
-
 void xeth_proxy_dump_ifa(struct xeth_proxy *proxy)
 {
 	struct in_ifaddr *ifa;

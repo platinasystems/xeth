@@ -7,14 +7,15 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_bridge.h"
-#include "xeth_lb.h"
-#include "xeth_lag.h"
-#include "xeth_vlan.h"
-#include "xeth_port.h"
-#include "xeth_mux.h"
-#include "xeth_version.h"
 #include <linux/module.h>
+
+#if defined(KBUILD_MODNAME)
+# define XETH_MOD_NAME KBUILD_MODNAME
+#else /* !KBUILD_MODNAME */
+# define XETH_MOD_NAME "xeth"
+#endif /* KBUILD_MODNAME */
+
+const char *xeth_mod_name = XETH_MOD_NAME;
 
 static struct platform_driver * const xeth_mod_drivers[] = {
 	&xeth_mux_driver,
@@ -42,6 +43,8 @@ static int __init xeth_mod_init(void)
 	struct rtnl_link_ops * const *lnko = NULL;
 	int err;
 
+	no_xeth_debug_test();
+	no_xeth_err_test();
 	for (drvr = xeth_mod_drivers; err >= 0 && (*drvr); drvr++)
 		err = platform_driver_register(*drvr);
 	for (lnko = xeth_mod_lnkos; err >= 0 && (*lnko); lnko++)

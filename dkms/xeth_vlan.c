@@ -7,16 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_vlan.h"
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_port.h"
-#include "xeth_lag.h"
-#include "xeth_sbtx.h"
-#include "xeth_version.h"
-#include "xeth_debug.h"
-#include <linux/netdevice.h>
-
 static const char xeth_vlan_drvname[] = "xeth-vlan";
 
 struct xeth_vlan_priv {
@@ -185,7 +175,7 @@ static int xeth_vlan_newlink(struct net *src_net, struct net_device *nd,
 			}
 
 	if (vid < 1 || vid >= VLAN_N_VID) {
-		xeth_debug_nd(nd, "vid %d out-of-range", vid);
+		xeth_nd_err(nd, "vid %d out-of-range", vid);
 		NL_SET_ERR_MSG(extack, "out-of-range VID");
 		return -ERANGE;
 	}

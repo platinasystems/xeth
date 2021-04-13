@@ -7,17 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_bridge.h"
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_port.h"
-#include "xeth_vlan.h"
-#include "xeth_lag.h"
-#include "xeth_sbtx.h"
-#include "xeth_version.h"
-#include "xeth_debug.h"
-#include <linux/netdevice.h>
-
 static const char xeth_bridge_drvname[] = "xeth-bridge";
 
 struct xeth_bridge_priv {
@@ -236,7 +225,7 @@ static int xeth_bridge_newlink(struct net *src_net, struct net_device *br,
 		}
 	xeth_mux_add_proxy(&priv->proxy);
 
-	err = xeth_debug_nd_err(br, register_netdevice(br));
+	err = xeth_nd_prif_err(br, register_netdevice(br));
 	if (err) {
 		NL_SET_ERR_MSG(extack, "registry failed");
 		xeth_mux_del_proxy(&priv->proxy);

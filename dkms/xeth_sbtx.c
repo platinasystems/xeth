@@ -7,11 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_sbtx.h"
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_lb.h"
-#include "xeth_debug.h"
 #include <net/nexthop.h>
 
 static void xeth_sbtx_msg_set(void *data, enum xeth_msg_kind kind)
@@ -258,7 +253,7 @@ int xeth_sbtx_fib6_entry(struct net_device *mux,
 			 struct fib6_entry_notifier_info *feni,
 			 unsigned long event)
 {
-	struct fib6_info *f6i = xeth_debug_ptr_err(feni->rt);
+	struct fib6_info *f6i = xeth_nd_prif_ptr_err(mux, feni->rt);
 	struct xeth_sbtxb *sbtxb;
 	struct xeth_msg_fib6entry *msg;
 	struct fib6_info *iter;

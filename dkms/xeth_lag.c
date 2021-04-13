@@ -7,15 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_lag.h"
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_port.h"
-#include "xeth_sbtx.h"
-#include "xeth_version.h"
-#include "xeth_debug.h"
-#include <linux/netdevice.h>
-
 static const char xeth_lag_drvname[] = "xeth-lag";
 
 struct xeth_lag_priv {

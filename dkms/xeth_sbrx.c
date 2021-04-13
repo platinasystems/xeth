@@ -7,14 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_mux.h"
-#include "xeth_nb.h"
-#include "xeth_proxy.h"
-#include "xeth_sbrx.h"
-#include "xeth_sbtx.h"
-#include "xeth_port.h"
-#include "xeth_debug.h"
-
 static bool xeth_sbrx_is_msg(void *data)
 {
 	struct xeth_msg *msg = data;
@@ -88,13 +80,13 @@ int xeth_sbrx(struct net_device *mux, struct socket *conn, void *data)
 	case XETH_MSG_KIND_DUMP_IFINFO:
 		xeth_mux_dump_all_ifinfo(mux);
 		xeth_sbtx_break(mux);
-		xeth_debug_err(xeth_nb_start_netdevice(mux));
-		xeth_debug_err(xeth_nb_start_inetaddr(mux));
+		xeth_nd_prif_err(mux, xeth_nb_start_netdevice(mux));
+		xeth_nd_prif_err(mux, xeth_nb_start_inetaddr(mux));
 		break;
 	case XETH_MSG_KIND_DUMP_FIBINFO:
-		xeth_debug_err(xeth_nb_start_fib(mux));
+		xeth_nd_prif_err(mux, xeth_nb_start_fib(mux));
 		xeth_sbtx_break(mux);
-		xeth_debug_err(xeth_nb_start_netevent(mux));
+		xeth_nd_prif_err(mux, xeth_nb_start_netevent(mux));
 		break;
 	case XETH_MSG_KIND_CARRIER:
 		xeth_sbrx_carrier(mux, data);

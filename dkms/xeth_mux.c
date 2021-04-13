@@ -7,18 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_rtnl.h"
-#include "xeth_mux.h"
-#include "xeth_link_stat.h"
-#include "xeth_nb.h"
-#include "xeth_proxy.h"
-#include "xeth_sbrx.h"
-#include "xeth_sbtx.h"
-#include "xeth_port.h"
-#include "xeth_bridge.h"
-#include "xeth_vlan.h"
-#include "xeth_debug.h"
-#include "xeth_version.h"
 #include <linux/acpi.h>
 #include <linux/if_vlan.h>
 #include <net/sock.h>
@@ -143,7 +131,7 @@ struct xeth_nb *xeth_mux_nb(struct net_device *mux)
 struct net_device *xeth_mux_of_nb(struct xeth_nb *nb)
 {
 	struct xeth_mux_priv *priv =
-		xeth_debug_container_of(nb, struct xeth_mux_priv, nb);
+		xeth_container_of(nb, struct xeth_mux_priv, nb);
 	return priv->nd;
 }
 
@@ -339,8 +327,7 @@ void xeth_mux_add_proxy(struct xeth_proxy *proxy)
 		break;
 	case XETH_DEV_KIND_UNSPEC:
 	default:
-		pr_err("%s:%s: invalid kind: 0x%x", __func__,
-		       netdev_name(proxy->nd), proxy->kind);
+		xeth_err("kind: 0x%x invalid", proxy->kind);
 	}
 	xeth_mux_unlock_proxy(priv);
 }
@@ -505,7 +492,7 @@ static void xeth_mux_setup(struct net_device *mux)
 
 static int xeth_mux_set_lower_promiscuity(struct net_device *lower)
 {
-	return xeth_debug_nd_err(lower, dev_set_promiscuity(lower, 1));
+	return xeth_nd_prif_err(lower, dev_set_promiscuity(lower, 1));
 }
 
 static int xeth_mux_set_lower_mtu(struct net_device *lower)
@@ -514,8 +501,8 @@ static int xeth_mux_set_lower_mtu(struct net_device *lower)
 		lower->netdev_ops->ndo_change_mtu;
 	if (!change_mtu_op || lower->mtu == XETH_SIZEOF_JUMBO_FRAME)
 		return 0;
-	return xeth_debug_nd_err(lower,
-				 change_mtu_op(lower, XETH_SIZEOF_JUMBO_FRAME));
+	return xeth_nd_prif_err(lower, change_mtu_op(lower,
+						     XETH_SIZEOF_JUMBO_FRAME));
 }
 
 static int xeth_mux_lower_is_loopback(struct net_device *mux,
@@ -556,10 +543,10 @@ static int xeth_mux_bind_lower(struct net_device *mux,
 	int err;
 
 	lower->flags |= IFF_SLAVE;
-	err = xeth_debug_nd_err(lower,
-				netdev_master_upper_dev_link(lower, mux,
-							     NULL, NULL,
-							     ack));
+	err = xeth_nd_prif_err(lower,
+			       netdev_master_upper_dev_link(lower, mux,
+							    NULL, NULL,
+							    ack));
 	if (err)
 		lower->flags &= ~IFF_SLAVE;
 	else
@@ -794,7 +781,7 @@ static int xeth_mux_service_sbtx(struct net_device *mux)
 		xeth_mux_inc_sbtx_free(mux);
 	}
 	xeth_mux_unlock_sb(priv);
-	xeth_debug_err(xeth_mux_get_sbtx_queued(mux) > 0);
+	xeth_prif_err(xeth_mux_get_sbtx_queued(mux) > 0);
 
 	return err;
 }
@@ -856,8 +843,8 @@ static int xeth_mux_main(void *data)
 				xeth_mux_drop_all_port_carrier(mux);
 				xeth_mux_reset_all_link_stats(mux);
 				xeth_mux_reset_all_port_ethtool_stats(mux);
-				xeth_debug_nd_err(mux,
-						  xeth_mux_service_sbtx(mux));
+				xeth_nd_prif_err(mux,
+						 xeth_mux_service_sbtx(mux));
 				if (xeth_mux_has_sbrx_task(mux)) {
 					kthread_stop(sbrx);
 					while (xeth_mux_has_sbrx_task(mux)) {
@@ -907,7 +894,7 @@ static int xeth_mux_open(struct net_device *mux)
 
 	netdev_for_each_lower_dev(mux, lower, lowers)
 		if (!(lower->flags & IFF_UP))
-			xeth_debug_nd_err(lower, dev_open(lower, NULL));
+			xeth_nd_prif_err(lower, dev_open(lower, NULL));
 
 	xeth_mux_check_lower_carrier(mux);
 
@@ -1250,7 +1237,7 @@ static int xeth_mux_newlink(struct net *src_net, struct net_device *nd,
 		priv->encap = nla_get_u8(data[XETH_MUX_IFLA_ENCAP]);
 	err = register_netdevice(nd);
 	if (!err && link)
-		err = xeth_debug_nd_err(nd, xeth_mux_add_lower(nd, link, ack));
+		err = xeth_nd_prif_err(nd, xeth_mux_add_lower(nd, link, ack));
 	if (!err)
 		priv->main = kthread_run(xeth_mux_main, nd, "%s", nd->name);
 	if (err)
@@ -1398,6 +1385,7 @@ static ssize_t xeth_mux_link_addrs(struct platform_device *pd,
 	rcu_read_unlock();
 	for (l = 0; l < a; l++)
 		if (!links[l]) {
+			xeth_err("link[%d]: mac %pM not found", l, addrs[a]);
 			for (l = 0; l < a; l++) {
 				if (links[l]) {
 					dev_put(links[l]);
@@ -1570,8 +1558,8 @@ static void xeth_mux_mk_platina_mk1_ppds(struct platform_device *pd,
 
 		ppd = platform_device_register_full(&info[port]);
 		if (IS_ERR(ppd)) {
-			pr_err("can't make xeth.%d: %ld",
-			       info[port].id, PTR_ERR(ppd));
+			xeth_nd_err(mux, "make:xeth.%d: %ld",
+				    info[port].id, PTR_ERR(ppd));
 			return;
 		}
 		priv->ppds[port] = ppd;
@@ -1635,7 +1623,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 	else
 		eth_hw_addr_random(mux);
 
-	if (err = xeth_debug_err(register_netdevice(mux)), err < 0) {
+	if (err = xeth_prif_err(register_netdevice(mux)), err < 0) {
 		for (--n_links; n_links >= 0 && links[n_links]; --n_links)
 			dev_put(links[n_links]);
 		free_netdev(mux);
@@ -1647,12 +1635,12 @@ static int xeth_mux_probe(struct platform_device *pd)
 		if (!err)
 			priv->stat_name.sysfs = true;
 		else
-			pr_err("create %s/stat-name: %d\n", mux->name, err);
+			xeth_nd_err(mux, "create:stat-name: %d", err);
 	}
 
 	for (i = 0, err = 0; i < n_links; i++)
 		if (err = xeth_mux_add_lower(mux, links[i], NULL), err)
-			pr_err("link %s: %d\n", links[i]->name, err);
+			xeth_nd_err(mux, "link:%s: %d", links[i]->name, err);
 
 	priv->main = kthread_run(xeth_mux_main, mux, "%s", mux->name);
 

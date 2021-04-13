@@ -7,14 +7,6 @@
  * Platina Systems, 3180 Del La Cruz Blvd, Santa Clara, CA 95054
  */
 
-#include "xeth_mux.h"
-#include "xeth_proxy.h"
-#include "xeth_port.h"
-#include "xeth_qsfp.h"
-#include "xeth_sbtx.h"
-#include "xeth_version.h"
-#include "xeth_debug.h"
-
 enum {
 	xeth_port_top_vid = 3999,
 };
@@ -342,22 +334,22 @@ static int xeth_port_validate_port(struct net_device *nd, u8 port)
 
 static int xeth_port_validate_duplex(struct net_device *nd, u8 duplex)
 {
-	return xeth_debug_nd_err(nd,
-				 duplex != DUPLEX_HALF &&
-				 duplex != DUPLEX_FULL &&
-				 duplex != DUPLEX_UNKNOWN) ?  -EINVAL : 0;
+	return xeth_nd_prif_err(nd,
+				duplex != DUPLEX_HALF &&
+				duplex != DUPLEX_FULL &&
+				duplex != DUPLEX_UNKNOWN) ? -EINVAL : 0;
 }
 
 static int xeth_port_validate_speed(struct net_device *nd, u32 speed)
 {
-        return xeth_debug_nd_err(nd,
-				 speed != 100000 &&
-				 speed != 50000 &&
-				 speed != 40000 &&
-				 speed != 25000 &&
-				 speed != 20000 &&
-				 speed != 10000 &&
-				 speed != 1000) ?  -EINVAL : 0;
+        return xeth_nd_prif_err(nd,
+				speed != 100000 &&
+				speed != 50000 &&
+				speed != 40000 &&
+				speed != 25000 &&
+				speed != 20000 &&
+				speed != 10000 &&
+				speed != 1000) ? -EINVAL : 0;
 }
 
 static int
@@ -764,7 +756,7 @@ static int xeth_port(struct platform_device *pd, struct net_device *mux,
 	xeth_mux_add_proxy(&priv->proxy);
 
 	rtnl_lock();
-	err = xeth_debug_nd_err(nd, register_netdevice(nd));
+	err = xeth_nd_prif_err(nd, register_netdevice(nd));
 	rtnl_unlock();
 
 	if (err) {
@@ -804,7 +796,7 @@ static int xeth_port_probe(struct platform_device *pd)
 
 	dev_put(mux);
 	if (err)
-		pr_err("can't make %s: %d\n", name, err);
+		xeth_nd_err(mux, "can't make %s: %d\n", name, err);
 	return err;
 }
 
