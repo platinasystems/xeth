@@ -1,3 +1,18 @@
+xeth (3.0.2) stretch; urgency=medium
+
+  * import go package
+  * separate dkms/Kbuild from out-of-tree Makefile
+  * pass through make V variable to dkms
+  * update go:generate of xeth uapi
+  * Revert "alternate missing link-addr recovery"
+  * mv go.mod to top of repos and set v3 api
+  * fix double add of base_port
+  * hold rtnl throughout platform probe
+  * remove port platform devs before mux
+  * collapse headers and cleanup error msgs
+
+ -- Tom Grennan <tgrennan@platinasystems.com>  Tue, 13 Apr 2021 15:55:52 -0700
+
 xeth (3.0.1) stretch; urgency=medium
 
   * fix debuild artifacts
