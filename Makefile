@@ -16,31 +16,21 @@ endif
 # subject, verb, object(s)
 svo = $(if $(Q),$(info $1 $3))$(Q)$2 $3
 
-define clean
-$(if $(files),$(call svo, CLEAN, rm, $(files)))
-$(if $(dirs),$(call svo, CLEAN, rm -r, $(dirs)))
-endef
-
-define debuild
-$(call svo, DEBUILD, debuild -uc -us --lintian-opts --profile debian)
-endef
-
-define mk-dkms
-$(call svo, DKMS, $(MAKE) -C dkms, $@)
-endef
-
 default:
 
-bindeb-pkg: ; $(debuild)
+bindeb-pkg:
+	$(call svo, DEBUILD,\
+		debuild -uc -us -ui -b --lintian-opts --profile debian)
 
 clean: files = $(wildcard README.html)
 clean:
-	$(mk-dkms)
-	$(clean)
+	$(call svo, DKMS, $(MAKE) -C dkms, $@)
+	$(if $(files),$(call svo, CLEAN, rm, $(files)))
 
 docs: README.html
 
-modules modules_install: ; $(mk-dkms)
+modules modules_install:
+	$(call svo, DKMS, $(MAKE) -C dkms, $@)
 
 .PHONY: default bindeb-pkg clean docs modules modules_install
 
