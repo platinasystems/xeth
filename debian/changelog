@@ -1,3 +1,13 @@
+xeth (3.0.2.2) stretch; urgency=medium
+
+  [ Tom Grennan ]
+  * make bindeb-pkg binary only
+
+  [ Kevin Paul Herbert ]
+  * dkms.conf: Only build for 5.4 kernels
+
+ -- Kevin Paul Herbert <kph@platinasystems.com>  Wed, 21 Apr 2021 12:07:44 -0700
+
 xeth (3.0.2.1) stretch; urgency=medium
 
   * add missing Kbuild to debian/install
