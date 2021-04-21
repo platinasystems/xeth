@@ -257,7 +257,7 @@ static void xeth_port_ksettings(struct ethtool_link_ksettings *ks)
 	ethtool_link_ksettings_add_link_mode(ks, supported, FEC_BASER);
 	bitmap_copy(ks->link_modes.advertising, ks->link_modes.supported,
 		    __ETHTOOL_LINK_MODE_MASK_NBITS);
-	/* disable FEC_NONE so that the vner-platina-mk1 interprets
+	/* disable FEC_NONE so that the SWITCHD interprets
 	 * FEC_RS|FEC_BASER as FEC_AUTO */
 	ethtool_link_ksettings_del_link_mode(ks, advertising, FEC_NONE);
 }
@@ -565,7 +565,7 @@ static void xeth_port_qsfp(struct xeth_port_priv *priv, u8 bus)
 		xeth_mux_qsfp_absent_gpio(priv->proxy.mux, priv->port);
 	struct gpio_desc *reset_gpio =
 		xeth_mux_qsfp_reset_gpio(priv->proxy.mux, priv->port);
-	const unsigned short const *addrs =
+	const unsigned short * const addrs =
 		xeth_mux_qsfp_i2c_addrs(priv->proxy.mux);
 	if (!absent_gpio || !reset_gpio)
 		return;
@@ -663,18 +663,6 @@ struct rtnl_link_ops xeth_port_lnko = {
 	.maxtype	= XETH_PORT_N_IFLA - 1,
 };
 
-static bool xeth_port_is_platina_mk1(struct platform_device *pd);
-
-static const char *xeth_port_mux_prop(struct platform_device *pd)
-{
-	const char *val;
-	if (xeth_port_is_platina_mk1(pd))
-		val = "platina-mk1";
-	else if (device_property_read_string(&pd->dev, "mux", &val))
-		val = "xeth-mux";
-	return val;
-}
-
 static int xeth_port_index_prop(struct platform_device *pd)
 {
 	u32 val;
@@ -683,10 +671,10 @@ static int xeth_port_index_prop(struct platform_device *pd)
 		-EINVAL : val;
 }
 
-static u64 xeth_port_addr_prop(struct platform_device *pd)
+static void xeth_port_addr_prop(struct platform_device *pd, char *addr)
 {
-	u64 val;
-	return device_property_read_u64(&pd->dev, "addr", &val) ?  0 : val;
+	if (!device_get_mac_address(&pd->dev, addr, ETH_ALEN))
+		eth_zero_addr(addr);
 }
 
 static u8 xeth_port_qs_prop(struct platform_device *pd, const char *label)
@@ -702,7 +690,8 @@ static u8 xeth_port_qsfp_bus_prop(struct platform_device *pd)
 }
 
 static int xeth_port(struct platform_device *pd, struct net_device *mux,
-		     const char *ifname, int port, int subport, u64 addr)
+		     const char *ifname, int port, int subport,
+		     const char *addr)
 {
 	struct net_device *nd;
 	struct xeth_port_priv *priv;
@@ -729,8 +718,8 @@ static int xeth_port(struct platform_device *pd, struct net_device *mux,
 	nd->min_mtu = priv->proxy.mux->min_mtu;
 	nd->max_mtu = priv->proxy.mux->max_mtu;
 
-	if (addr) {
-		u64_to_ether_addr(addr, nd->dev_addr);
+	if (!is_zero_ether_addr(addr)) {
+		ether_addr_copy(nd->dev_addr, addr);
 		nd->addr_assign_type = NET_ADDR_PERM;
 	} else
 		eth_hw_addr_random(nd);
@@ -769,25 +758,33 @@ static int xeth_port(struct platform_device *pd, struct net_device *mux,
 static int xeth_port_probe(struct platform_device *pd)
 {
 	struct net_device *mux;
-	char name[IFNAMSIZ];
-	int port, subport, subports, err;
-	u64 addr;
+	char name[IFNAMSIZ], addr[ETH_ALEN];
+	int port, subports, err;
 	u8 base_port;
 
-	mux = dev_get_by_name(&init_net, xeth_port_mux_prop(pd));
+	xeth_mux_ifname(pd->dev.parent, name);
+	mux = dev_get_by_name(&init_net, name);
 	if (!mux)
 		return -EPROBE_DEFER;
 
 	port = xeth_port_index_prop(pd);
-	addr = xeth_port_addr_prop(pd);
+	xeth_port_addr_prop(pd, addr);
 	subports = xeth_port_subports(port);
 	base_port = xeth_mux_base_port(mux);
 
 	if (subports > 1) {
-		for (subport = err = 0; !err && subport < subports; subport++) {
+		u16 ports = xeth_mux_ports(mux);
+		int sp;
+		u64 u;
+
+		for (sp = err = 0; !err && sp < subports; sp++) {
 			scnprintf(name, IFNAMSIZ, "xeth%u-%u",
-				  port + base_port, subport + base_port);
-			err = xeth_port(pd, mux, name, port, subport, addr);
+				  port + base_port, sp + base_port);
+			err = xeth_port(pd, mux, name, port, sp, addr);
+			eth_addr_inc(addr);
+			u = ether_addr_to_u64(addr);
+			u += ports;
+			u64_to_ether_addr(u, addr);
 		}
 	} else {
 		scnprintf(name, IFNAMSIZ, "xeth%u", port + base_port);
@@ -851,12 +848,6 @@ static const struct platform_device_id xeth_port_id_match[] = {
 };
 
 MODULE_DEVICE_TABLE(platform, xeth_port_id_match);
-
-static bool xeth_port_is_platina_mk1(struct platform_device *pd)
-{
-	return pd->id_entry == &xeth_port_id_match[0];
-
-}
 
 struct platform_driver xeth_port_driver = {
 	.driver = {

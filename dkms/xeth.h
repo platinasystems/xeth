@@ -24,6 +24,14 @@
 #include <net/netevent.h>
 #include <net/rtnetlink.h>
 
+#include <generated/uapi/linux/version.h>
+
+#if !defined(LINUX_VERSION_CODE) || \
+	(LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0))
+#  define fib_notifier_info_with_net true
+#else
+#  define fib_notifier_info_without_net true
+#endif
 
 extern const char *xeth_mod_name;
 
@@ -342,6 +350,7 @@ static inline bool is_xeth_mux(struct net_device *nd)
 	return nd->netdev_ops == &xeth_mux_ndo;
 }
 
+void xeth_mux_ifname(struct device *dev, char ifname[]);
 enum xeth_encap xeth_mux_encap(struct net_device *mux);
 u8 xeth_mux_base_port(struct net_device *mux);
 u16 xeth_mux_ports(struct net_device *mux);
@@ -364,7 +373,7 @@ void xeth_mux_del_vlans(struct net_device *mux, struct net_device *nd,
 			struct list_head *unregq);
 void xeth_mux_dump_all_ifinfo(struct net_device *);
 
-const unsigned short *xeth_mux_qsfp_i2c_addrs(struct net_device *mux);
+const unsigned short * const xeth_mux_qsfp_i2c_addrs(struct net_device *mux);
 struct gpio_desc *xeth_mux_qsfp_absent_gpio(struct net_device *mux, size_t prt);
 struct gpio_desc *xeth_mux_qsfp_intr_gpio(struct net_device *mux, size_t prt);
 struct gpio_desc *xeth_mux_qsfp_lpmode_gpio(struct net_device *mux, size_t prt);
@@ -509,7 +518,6 @@ enum xeth_mux_flag {
 	xeth_mux_flag_name(sb_listen),					\
 	xeth_mux_flag_name(sb_connection),				\
 	xeth_mux_flag_name(sbrx_task),					\
-	xeth_mux_flag_name(fib_notifier),				\
 	xeth_mux_flag_name(inetaddr_notifier),				\
 	xeth_mux_flag_name(inet6addr_notifier),				\
 	xeth_mux_flag_name(netdevice_notifier),				\
@@ -560,8 +568,52 @@ xeth_mux_flag_ops(inet6addr_notifier)
 xeth_mux_flag_ops(netdevice_notifier)
 xeth_mux_flag_ops(netevent_notifier)
 
-struct xeth_nb {
+struct xeth_muxfibnet {
+	struct list_head list;
+	struct net_device *mux;
 	struct notifier_block fib;
+	struct net *net;
+};
+
+static inline void xeth_mux_fib_cb(struct notifier_block *fib)
+{
+	struct xeth_muxfibnet *mfn = container_of(fib, typeof(*mfn), fib);
+	xeth_nd_debug(mfn->mux, "registered fib notifier");
+}
+
+static inline struct net *
+xeth_muxfibnet_net(struct xeth_muxfibnet *mfn,
+		   struct fib_notifier_info *info)
+{
+	return
+#if defined(fib_notifier_info_with_net)
+	info->net;
+#else
+	mfn->net;
+#endif
+}
+
+static inline int xeth_muxfibnet_register(struct xeth_muxfibnet *mfn)
+{
+	return
+#if defined(fib_notifier_info_with_net)
+	register_fib_notifier(&mfn->fib, xeth_mux_fib_cb);
+#else
+	register_fib_notifier(mfn->net, &mfn->fib, xeth_mux_fib_cb, NULL);
+#endif
+}
+
+static inline void xeth_muxfibnet_unregister(struct xeth_muxfibnet *mfn)
+{
+#if defined(fib_notifier_info_with_net)
+	unregister_fib_notifier(&mfn->fib);
+#else
+	unregister_fib_notifier(mfn->net, &mfn->fib);
+#endif
+}
+
+struct xeth_nb {
+	struct list_head fibs;
 	struct notifier_block inetaddr;
 	struct notifier_block inet6addr;
 	struct notifier_block netdevice;
@@ -571,13 +623,15 @@ struct xeth_nb {
 struct xeth_nb *xeth_mux_nb(struct net_device *mux);
 struct net_device *xeth_mux_of_nb(struct xeth_nb *);
 
-int xeth_nb_start_fib(struct net_device *mux);
+int xeth_nb_start_new_fib(struct net_device *mux, struct net *net);
+int xeth_nb_start_all_fib(struct net_device *mux);
 int xeth_nb_start_inetaddr(struct net_device *mux);
 int xeth_nb_start_inet6addr(struct net_device *mux);
 int xeth_nb_start_netdevice(struct net_device *mux);
 int xeth_nb_start_netevent(struct net_device *mux);
 
-void xeth_nb_stop_fib(struct net_device *mux);
+void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net);
+void xeth_nb_stop_all_fib(struct net_device *mux);
 void xeth_nb_stop_inetaddr(struct net_device *mux);
 void xeth_nb_stop_inet6addr(struct net_device *mux);
 void xeth_nb_stop_netdevice(struct net_device *mux);
@@ -673,7 +727,7 @@ int xeth_qsfp_get_module_eeprom(struct i2c_client *qsfp,
  * @nr: bus number
  * @addrs: a I2C_CLIENT_END terminated list
  */
-struct i2c_client *xeth_qsfp_client(int nr, const unsigned short const *addrs);
+struct i2c_client *xeth_qsfp_client(int nr, const unsigned short *addrs);
 
 extern struct rtnl_link_ops xeth_vlan_lnko;
 
@@ -713,10 +767,10 @@ int xeth_sbtx_change_upper(struct net_device *, u32 upper_xid, u32 lower_xid,
 int xeth_sbtx_et_flags(struct net_device *, u32 xid, u32 flags);
 int xeth_sbtx_et_settings(struct net_device *, u32 xid,
 			  const struct ethtool_link_ksettings *);
-int xeth_sbtx_fib_entry(struct net_device *,
+int xeth_sbtx_fib_entry(struct net_device *, struct net *net,
 			struct fib_entry_notifier_info *feni,
 			unsigned long event);
-int xeth_sbtx_fib6_entry(struct net_device *,
+int xeth_sbtx_fib6_entry(struct net_device *, struct net *net,
 			 struct fib6_entry_notifier_info *feni,
 			 unsigned long event);
 int xeth_sbtx_ifa(struct net_device *, struct in_ifaddr *ifa,

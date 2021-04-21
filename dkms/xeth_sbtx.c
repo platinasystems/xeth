@@ -134,7 +134,7 @@ static const char * const xeth_sbtx_fib_event_names[] = {
 	[FIB_EVENT_ENTRY_DEL] "del",
 };
 
-int xeth_sbtx_fib_entry(struct net_device *mux,
+int xeth_sbtx_fib_entry(struct net_device *mux, struct net *net,
 			struct fib_entry_notifier_info *feni,
 			unsigned long event)
 {
@@ -153,8 +153,7 @@ int xeth_sbtx_fib_entry(struct net_device *mux,
 	msg = xeth_sbtxb_data(sbtxb);
 	nh = (typeof(nh))&msg->nh[0];
 	xeth_sbtx_msg_set(msg, XETH_MSG_KIND_FIBENTRY);
-	msg->net = net_eq(feni->info.net, &init_net) ? 1 :
-		feni->info.net->ns.inum;
+	msg->net = net_eq(net, &init_net) ? 1 : net->ns.inum;
 	msg->address = htonl(feni->dst);
 	msg->mask = inet_make_mask(feni->dst_len);
 	msg->event = (u8)event;
@@ -179,7 +178,7 @@ int xeth_sbtx_fib_entry(struct net_device *mux,
 	return 0;
 }
 
-int xeth_sbtx_fib6_nh_entry(struct net_device *mux,
+int xeth_sbtx_fib6_nh_entry(struct net_device *mux, struct net *net,
 			    struct fib6_entry_notifier_info *feni,
 			    struct fib6_info *f6i, unsigned long event)
 {
@@ -206,8 +205,7 @@ int xeth_sbtx_fib6_nh_entry(struct net_device *mux,
 		return -ENOMEM;
 	msg = xeth_sbtxb_data(sbtxb);
 	xeth_sbtx_msg_set(msg, XETH_MSG_KIND_FIB6ENTRY);
-	msg->net = net_eq(feni->info.net, &init_net) ? 1 :
-		feni->info.net->ns.inum;
+	msg->net = net_eq(net, &init_net) ? 1 : net->ns.inum;
 	memcpy(msg->address, &f6i->fib6_dst.addr, 16);
 	msg->length = f6i->fib6_dst.plen;
 	msg->event = (u8)event;
@@ -249,7 +247,7 @@ int xeth_sbtx_fib6_nh_entry(struct net_device *mux,
 	return 0;
 }
 
-int xeth_sbtx_fib6_entry(struct net_device *mux,
+int xeth_sbtx_fib6_entry(struct net_device *mux, struct net *net,
 			 struct fib6_entry_notifier_info *feni,
 			 unsigned long event)
 {
@@ -263,7 +261,7 @@ int xeth_sbtx_fib6_entry(struct net_device *mux,
 	if (IS_ERR(f6i))
 		return PTR_ERR(f6i);
 	if (f6i->nh)
-		return xeth_sbtx_fib6_nh_entry(mux, feni, f6i, event);
+		return xeth_sbtx_fib6_nh_entry(mux, net, feni, f6i, event);
 	nsiblings = f6i->fib6_nsiblings;
 	if (nsiblings > 0)
 		sz += nsiblings * sizeof(struct xeth_next_hop6 *);
@@ -272,8 +270,7 @@ int xeth_sbtx_fib6_entry(struct net_device *mux,
 		return -ENOMEM;
 	msg = xeth_sbtxb_data(sbtxb);
 	xeth_sbtx_msg_set(msg, XETH_MSG_KIND_FIB6ENTRY);
-	msg->net = net_eq(feni->info.net, &init_net) ? 1 :
-		feni->info.net->ns.inum;
+	msg->net = net_eq(net, &init_net) ? 1 : net->ns.inum;
 	memcpy(msg->address, &f6i->fib6_dst.addr, 16);
 	msg->length = f6i->fib6_dst.plen;
 	msg->event = (u8)event;

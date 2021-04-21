@@ -11,18 +11,16 @@
 
 #include <net/ip_fib.h>
 
-static int xeth_nb_fib(struct notifier_block *fib,
-		       unsigned long event, void *ptr)
+static int xeth_nb_fib(struct notifier_block *fib, unsigned long event,
+		       void *ptr)
 {
+	struct xeth_muxfibnet *mfn = container_of(fib, typeof(*mfn), fib);
 	struct fib_notifier_info *info = ptr;
-	struct xeth_nb *nb;
-	struct net_device *mux;
+	struct net *net = xeth_muxfibnet_net(mfn, info);
+	struct fib_entry_notifier_info *feni;
+	struct fib6_entry_notifier_info *f6eni;
 
 	if (fib->notifier_call != xeth_nb_fib)
-		return NOTIFY_DONE;
-	if (nb = xeth_container_of(fib, struct xeth_nb, fib), IS_ERR(nb))
-		return NOTIFY_DONE;
-	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
 		return NOTIFY_DONE;
 	switch (event) {
 	case FIB_EVENT_ENTRY_REPLACE:
@@ -31,18 +29,12 @@ static int xeth_nb_fib(struct notifier_block *fib,
 	case FIB_EVENT_ENTRY_DEL:
 		switch (info->family) {
 		case AF_INET:
-			do {
-				struct fib_entry_notifier_info *feni =
-					container_of(info, typeof(*feni), info);
-				xeth_sbtx_fib_entry(mux, feni, event);
-			} while(0);
+			feni = container_of(info, typeof(*feni), info);
+			xeth_sbtx_fib_entry(mfn->mux, net, feni, event);
 			break;
 		case AF_INET6:
-			do {
-				struct fib6_entry_notifier_info *feni =
-					container_of(info, typeof(*feni), info);
-				xeth_sbtx_fib6_entry(mux, feni, event);
-			} while(0);
+			f6eni = container_of(info, typeof(*f6eni), info);
+			xeth_sbtx_fib6_entry(mfn->mux, net, f6eni, event);
 			break;
 		}
 		break;
@@ -59,8 +51,8 @@ static int xeth_nb_fib(struct notifier_block *fib,
 	return NOTIFY_DONE;
 }
 
-static int xeth_nb_inetaddr(struct notifier_block *inetaddr,
-			    unsigned long event, void *ptr)
+int xeth_nb_inetaddr(struct notifier_block *inetaddr, unsigned long event,
+		     void *ptr)
 {
 	struct in_ifaddr *ifa = (struct in_ifaddr *)ptr;
 	struct xeth_nb *nb;
@@ -69,7 +61,7 @@ static int xeth_nb_inetaddr(struct notifier_block *inetaddr,
 
 	if (inetaddr->notifier_call != xeth_nb_inetaddr)
 		return NOTIFY_DONE;
-	nb = xeth_container_of(inetaddr, struct xeth_nb, inetaddr);
+	nb = xeth_container_of(inetaddr, typeof(*nb), inetaddr);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -83,8 +75,8 @@ static int xeth_nb_inetaddr(struct notifier_block *inetaddr,
 	return NOTIFY_DONE;
 }
 
-static int xeth_nb_inet6addr(struct notifier_block *inet6addr,
-			     unsigned long event, void *ptr)
+int xeth_nb_inet6addr(struct notifier_block *inet6addr, unsigned long event,
+		      void *ptr)
 {
 	struct inet6_ifaddr *ifa6 = (struct inet6_ifaddr *)ptr;
 	struct xeth_nb *nb;
@@ -93,7 +85,7 @@ static int xeth_nb_inet6addr(struct notifier_block *inet6addr,
 
 	if (inet6addr->notifier_call != xeth_nb_inet6addr)
 		return NOTIFY_DONE;
-	nb = xeth_container_of(inet6addr, struct xeth_nb, inet6addr);
+	nb = xeth_container_of(inet6addr, typeof(*nb), inet6addr);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -107,8 +99,8 @@ static int xeth_nb_inet6addr(struct notifier_block *inet6addr,
 	return NOTIFY_DONE;
 }
 
-static int xeth_nb_netdevice(struct notifier_block *netdevice,
-			     unsigned long event, void *ptr)
+int xeth_nb_netdevice(struct notifier_block *netdevice, unsigned long event,
+		      void *ptr)
 {
 	struct xeth_nb *nb;
 	struct net_device *mux, *nd;
@@ -116,7 +108,7 @@ static int xeth_nb_netdevice(struct notifier_block *netdevice,
 
 	if (netdevice->notifier_call != xeth_nb_netdevice)
 		return NOTIFY_DONE;
-	nb = xeth_container_of(netdevice, struct xeth_nb, netdevice);
+	nb = xeth_container_of(netdevice, typeof(*nb), netdevice);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	mux = xeth_mux_of_nb(nb);
@@ -125,16 +117,18 @@ static int xeth_nb_netdevice(struct notifier_block *netdevice,
 	nd = netdev_notifier_info_to_dev(ptr);
 	if (nd->ifindex == 1) {
 		/*
-		 * ifindex(1) is the loopback port anf register/unregister of
+		 * ifindex(1) is the loopback port any register/unregister of
 		 * loopback corresponds to netns creation/destruction.
 		 */
-		struct net *ndnet = dev_net(nd);
+		struct net *net = dev_net(nd);
 		switch (event) {
 		case NETDEV_REGISTER:
-			xeth_sbtx_netns(mux, ndnet, true);
+			xeth_sbtx_netns(mux, net, true);
+			xeth_nb_start_new_fib(mux, net);
 			break;
 		case NETDEV_UNREGISTER:
-			xeth_sbtx_netns(mux, ndnet, false);
+			xeth_sbtx_netns(mux, net, false);
+			xeth_nb_stop_net_fib(mux, net);
 			break;
 		}
 		return NOTIFY_DONE;
@@ -170,15 +164,15 @@ static int xeth_nb_netdevice(struct notifier_block *netdevice,
 	return NOTIFY_DONE;
 }
 
-static int xeth_nb_netevent(struct notifier_block *netevent,
-			    unsigned long event, void *ptr)
+int xeth_nb_netevent(struct notifier_block *netevent, unsigned long event,
+		     void *ptr)
 {
 	struct xeth_nb *nb;
 	struct net_device *mux;
 
 	if (netevent->notifier_call != xeth_nb_netevent)
 		return NOTIFY_DONE;
-	nb = xeth_container_of(netevent, struct xeth_nb, netevent);
+	nb = xeth_container_of(netevent, typeof(*nb), netevent);
 	if (IS_ERR(nb))
 		return NOTIFY_DONE;
 	if (mux = xeth_mux_of_nb(nb), IS_ERR(mux))
@@ -191,15 +185,74 @@ static int xeth_nb_netevent(struct notifier_block *netevent,
 	return NOTIFY_DONE;
 }
 
-static void xeth_mux_fib_cb(struct notifier_block *fib)
+static int xeth_nb_start_fib(struct net_device *mux, struct net *net)
 {
-	struct xeth_nb *nb = xeth_container_of(fib, struct xeth_nb, fib);
-	struct net_device *mux = xeth_mux_of_nb(nb);
-	if (!IS_ERR(mux))
-		xeth_nd_debug(mux, "registered fib notifier");
+	int err;
+	struct xeth_nb *nb = xeth_mux_nb(mux);
+	struct xeth_muxfibnet *mfn;
+
+	list_for_each_entry(mfn, &nb->fibs, list)
+		if (mfn->net == net)
+			return -EBUSY;
+	mfn = devm_kzalloc(&mux->dev, sizeof(*mfn), GFP_KERNEL);
+	if (!mfn)
+		return -ENOMEM;
+	mfn->fib.notifier_call = xeth_nb_fib;
+	mfn->net = net;
+	err = xeth_muxfibnet_register(mfn);
+	if (!err)
+		list_add_tail(&mfn->list, &nb->fibs);
+	return err;
 }
 
-#define xeth_nb_register_fib(NB) register_fib_notifier(NB, xeth_mux_fib_cb)
+int xeth_nb_start_new_fib(struct net_device *mux, struct net *net)
+{
+#if defined(fib_notifier_info_without_net)
+	struct xeth_nb *nb = xeth_mux_nb(mux);
+
+	/* don't start fib notifications on new nets until DUMP_FIBINFO */
+	if (list_empty(&nb->fibs))
+		return xeth_nd_prif_err(mux, xeth_nb_start_fib(mux, net));
+#endif
+	return 0;
+}
+
+int xeth_nb_start_all_fib(struct net_device *mux)
+{
+	struct net *net;
+	int err;
+
+	xeth_nd_prif_err(mux, xeth_nb_start_fib(mux, &init_net));
+	list_for_each_entry(net, &net_namespace_list, list)
+		if (net != &init_net)
+			if (err = xeth_nb_start_new_fib(mux, net), err)
+				return err;
+	return 0;
+}
+
+void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net)
+{
+	struct xeth_nb *nb = xeth_mux_nb(mux);
+	struct xeth_muxfibnet *mfn, *tmp;
+
+	list_for_each_entry_safe(mfn, tmp, &nb->fibs, list)
+		if (mfn->net == net) {
+			xeth_muxfibnet_unregister(mfn);
+			list_del(&mfn->list);
+		}
+}
+
+void xeth_nb_stop_all_fib(struct net_device *mux)
+{
+	struct xeth_nb *nb = xeth_mux_nb(mux);
+	struct xeth_muxfibnet *mfn, *tmp;
+
+	list_for_each_entry_safe(mfn, tmp, &nb->fibs, list) {
+		xeth_muxfibnet_unregister(mfn);
+		list_del(&mfn->list);
+	}
+}
+
 #define xeth_nb_register_inetaddr(NB)	register_inetaddr_notifier(NB)
 #define xeth_nb_register_inet6addr(NB)	register_inet6addr_notifier(NB)
 #define xeth_nb_register_netdevice(NB)	register_netdevice_notifier(NB)
@@ -219,7 +272,6 @@ int xeth_nb_start_##NB(struct net_device *mux)				\
 	return err;							\
 }
 
-xeth_nb_start(fib)
 xeth_nb_start(inetaddr)
 xeth_nb_start(inet6addr)
 xeth_nb_start(netdevice)
@@ -235,9 +287,7 @@ void xeth_nb_stop_##NB(struct net_device *mux)				\
 	}								\
 }
 
-xeth_nb_stop(fib)
 xeth_nb_stop(inetaddr)
 xeth_nb_stop(inet6addr)
 xeth_nb_stop(netdevice)
 xeth_nb_stop(netevent)
-

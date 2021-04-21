@@ -84,7 +84,7 @@ int xeth_sbrx(struct net_device *mux, struct socket *conn, void *data)
 		xeth_nd_prif_err(mux, xeth_nb_start_inetaddr(mux));
 		break;
 	case XETH_MSG_KIND_DUMP_FIBINFO:
-		xeth_nd_prif_err(mux, xeth_nb_start_fib(mux));
+		xeth_nb_start_all_fib(mux);
 		xeth_sbtx_break(mux);
 		xeth_nd_prif_err(mux, xeth_nb_start_netevent(mux));
 		break;

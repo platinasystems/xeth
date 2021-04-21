@@ -13,6 +13,7 @@
 #include <linux/un.h>
 #include <linux/i2c.h>
 #include <linux/of_device.h>
+#include <uapi/linux/time.h>
 
 static const char xeth_mux_drvname[] = "xeth-mux";
 
@@ -26,6 +27,7 @@ enum {
 };
 
 struct xeth_mux_priv {
+	struct platform_device *pd;
 	struct net_device *nd;
 	struct xeth_nb nb;
 	struct task_struct *main;
@@ -120,6 +122,7 @@ static void xeth_mux_priv_init(struct xeth_mux_priv *priv)
 
 	INIT_LIST_HEAD(&priv->sb.free);
 	INIT_LIST_HEAD(&priv->sb.tx);
+	INIT_LIST_HEAD(&priv->nb.fibs);
 }
 
 struct xeth_nb *xeth_mux_nb(struct net_device *mux)
@@ -607,26 +610,33 @@ static int xeth_mux_service_sbrx(void *data)
 {
 	struct net_device *mux = data;
 	struct xeth_mux_priv *priv = netdev_priv(mux);
+#if 0
 	struct timeval tv = {
 		.tv_sec = 0,
 		.tv_usec = 10000,
 	};
+#endif
 	int err;
 
 	xeth_mux_set_sbrx_task(mux);
+#if 0
 	err = kernel_setsockopt(priv->sb.conn, SOL_SOCKET, SO_RCVTIMEO_NEW,
 				(char *)&tv, sizeof(tv));
-	if (err)
-		goto xeth_mux_service_sbrx_exit;
+	if (err) {
+		xeth_mux_clear_sbrx_task(mux);
+		return err;
+	}
+#endif
 
 	allow_signal(SIGKILL);
-	while (!err && !kthread_should_stop() && !signal_pending(current))
-		err = xeth_sbrx(mux, priv->sb.conn, priv->sb.rx);
+	for (err = 0;
+	     !err && !kthread_should_stop() && !signal_pending(current);
+	     err = xeth_sbrx(mux, priv->sb.conn, priv->sb.rx))
+		;
 	xeth_nb_stop_netevent(mux);
-	xeth_nb_stop_fib(mux);
+	xeth_nb_stop_all_fib(mux);
 	xeth_nb_stop_inetaddr(mux);
 	xeth_nb_stop_netdevice(mux);
-xeth_mux_service_sbrx_exit:
 	xeth_mux_clear_sbrx_task(mux);
 	return err;
 }
@@ -1302,58 +1312,58 @@ struct rtnl_link_ops xeth_mux_lnko = {
 	.get_link_net	= xeth_mux_get_link_net,
 };
 
-static const char *xeth_mux_compatible_prop(struct platform_device *pd)
+static const char *xeth_mux_compatible_prop(struct device *dev)
 {
 	const char *val;
-	int err = device_property_read_string(&pd->dev, "compatible", &val);
+	int err = device_property_read_string(dev, "compatible", &val);
 	return err ? "xeth,mux" : val;
 }
 
-static bool xeth_mux_is_platina_mk1(struct platform_device *pd)
+static bool xeth_mux_is_platina_mk1(struct device *dev)
 {
-	const char *val = xeth_mux_compatible_prop(pd);
+	const char *val = xeth_mux_compatible_prop(dev);
 	return !strcmp(val, "platina,mk1");
 }
 
-static const char *xeth_mux_name_prop(struct platform_device *pd)
+static const char *xeth_mux_ifname_prop(struct device *dev)
 {
 	const char *val;
-	int err = device_property_read_string(&pd->dev, "name", &val);
+	int err = device_property_read_string(dev, "name", &val);
 	return err ? NULL : val;
 }
 
-static void xeth_mux_name(struct platform_device *pd, char ifname[])
+void xeth_mux_ifname(struct device *dev, char ifname[])
 {
 	int i;
-	const char *s = xeth_mux_name_prop(pd);
+	const char *s = xeth_mux_ifname_prop(dev);
 	if (!s)
-		s = xeth_mux_compatible_prop(pd);
+		s = xeth_mux_compatible_prop(dev);
 	strncpy(ifname, s, IFNAMSIZ);
 	for (i = 0; i < IFNAMSIZ && ifname[i]; i++)
 		if (ifname[i] == ',')
 			ifname[i] = '-';
 }
 
-static enum xeth_encap xeth_mux_encap_prop(struct platform_device *pd)
+static enum xeth_encap xeth_mux_encap_prop(struct device *dev)
 {
-	return device_property_present(&pd->dev, "encap-vpls") ?
+	return device_property_present(dev, "encap-vpls") ?
 		XETH_ENCAP_VPLS : XETH_ENCAP_VLAN;
 }
 
-static u8 xeth_mux_base_port_prop(struct platform_device *pd)
+static u8 xeth_mux_base_port_prop(struct device *dev)
 {
 	u32 val;
-	return device_property_read_u32(&pd->dev, "base-port", &val) ?
+	return device_property_read_u32(dev, "base-port", &val) ?
 		1 : val&1;
 }
 
-static u16 xeth_mux_ports_prop(struct platform_device *pd)
+static u16 xeth_mux_ports_prop(struct device *dev)
 {
 	u16 val;
-	return device_property_read_u16(&pd->dev, "ports", &val) ? 32 : val;
+	return device_property_read_u16(dev, "ports", &val) ? 32 : val;
 }
 
-static ssize_t xeth_mux_link_addrs(struct platform_device *pd,
+static ssize_t xeth_mux_link_addrs(struct device *dev,
 				   struct net_device **links)
 {
 	char label[32];
@@ -1363,10 +1373,10 @@ static ssize_t xeth_mux_link_addrs(struct platform_device *pd,
 
 	for (a = 0; a < xeth_mux_max_links; a++) {
 		scnprintf(label, ARRAY_SIZE(label), "link%d-mac-address", a);
-		n = device_property_read_u8_array(&pd->dev, label, NULL, 0);
+		n = device_property_read_u8_array(dev, label, NULL, 0);
 		if (n != ETH_ALEN)
 			break;
-		if (device_property_read_u8_array(&pd->dev, label, addrs[a], n)
+		if (device_property_read_u8_array(dev, label, addrs[a], n)
 		    < 0)
 			break;
 	}
@@ -1397,7 +1407,7 @@ static ssize_t xeth_mux_link_addrs(struct platform_device *pd,
 	return a;
 }
 
-static ssize_t xeth_mux_link_akas(struct platform_device *pd,
+static ssize_t xeth_mux_link_akas(struct device *dev,
 				  struct net_device **links)
 {
 	static const char label[] = "link-akas";
@@ -1407,12 +1417,12 @@ static ssize_t xeth_mux_link_akas(struct platform_device *pd,
 	ssize_t n;
 	int i, l;
 
-	n = device_property_read_string_array(&pd->dev, label, NULL, 0);
+	n = device_property_read_string_array(dev, label, NULL, 0);
 	if (n <= 0)
 		return 0;
 	if (n > xeth_mux_max_links)
 		n = xeth_mux_max_links;
-	if (device_property_read_string_array(&pd->dev, label, akas, n) < 0)
+	if (device_property_read_string_array(dev, label, akas, n) < 0)
 		return 0;
 	for (l = 0; l < n; l++)
 		for (links[l] = NULL, aka = akas[l]; !links[l]; ) {
@@ -1439,7 +1449,7 @@ static u8 xeth_mux_qs_prop(struct platform_device *pd, const char *label)
 	return device_property_read_u8(&pd->dev, label, &val) ?  1 : val;
 }
 
-static size_t xeth_mux_flags_prop(struct platform_device *pd,
+static size_t xeth_mux_flags_prop(struct device *dev,
 				  char names[][ETH_GSTRING_LEN])
 {
 	const char label[] = "flags";
@@ -1447,9 +1457,9 @@ static size_t xeth_mux_flags_prop(struct platform_device *pd,
 	ssize_t n;
 	int i;
 
-	n = device_property_read_string_array(&pd->dev, label, NULL, 0);
+	n = device_property_read_string_array(dev, label, NULL, 0);
 	if (n <= 0) {
-		if (xeth_mux_is_platina_mk1(pd)) {
+		if (xeth_mux_is_platina_mk1(dev)) {
 			val[0] = "copper";
 			val[1] = "fec74";
 			val[2] = "fec91";
@@ -1459,7 +1469,7 @@ static size_t xeth_mux_flags_prop(struct platform_device *pd,
 	} else {
 		if (n > xeth_mux_max_flags)
 			n = xeth_mux_max_flags;
-		if (device_property_read_string_array(&pd->dev, "flags", val, n)
+		if (device_property_read_string_array(dev, "flags", val, n)
 		    != n)
 			return 0;
 	}
@@ -1468,26 +1478,26 @@ static size_t xeth_mux_flags_prop(struct platform_device *pd,
 	return n;
 }
 
-static size_t xeth_mux_stats_prop(struct platform_device *pd,
+static size_t xeth_mux_stats_prop(struct device *dev,
 				  char names[][ETH_GSTRING_LEN])
 {
 	static const char *val[xeth_mux_max_stats];
 	ssize_t n;
 	int i;
 
-	n = device_property_read_string_array(&pd->dev, "stats", NULL, 0);
+	n = device_property_read_string_array(dev, "stats", NULL, 0);
 	if (n <= 0)
 		return 0;
 	if (n > xeth_mux_max_stats)
 		n = xeth_mux_max_stats;
-	if (device_property_read_string_array(&pd->dev, "stats", val, n) != n)
+	if (device_property_read_string_array(dev, "stats", val, n) != n)
 		return 0;
 	for (i = 0; i < n; i++)
 		strncpy(names[i], val[i], ETH_GSTRING_LEN);
 	return n;
 }
 
-static void xeth_mux_qsfp_i2c_addrs_prop(struct platform_device *pd, u16 *addrs)
+static void xeth_mux_qsfp_i2c_addrs_prop(struct device *dev, u16 *addrs)
 {
 	static const char label[] = "qsfp-i2c-addrs";
 	int n;
@@ -1496,70 +1506,307 @@ static void xeth_mux_qsfp_i2c_addrs_prop(struct platform_device *pd, u16 *addrs)
 	addrs[1] = 0x51;
 	addrs[2] = I2C_CLIENT_END;
 
-	if (!device_property_present(&pd->dev, label))
+	if (!device_property_present(dev, label))
 		return;
 
-	n = device_property_read_u16_array(&pd->dev, label, NULL, 0);
+	n = device_property_read_u16_array(dev, label, NULL, 0);
 	if (n >= xeth_mux_max_qsfp_i2c_addrs)
 		return;
 
-	device_property_read_u16_array(&pd->dev, label, addrs, n);
+	device_property_read_u16_array(dev, label, addrs, n);
 	addrs[n] = I2C_CLIENT_END;
 }
 
-const unsigned short *xeth_mux_qsfp_i2c_addrs(struct net_device *mux)
+const unsigned short * const xeth_mux_qsfp_i2c_addrs(struct net_device *mux)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
 	return priv->qsfp_i2c_addrs;
 }
 
-static void xeth_mux_mk_platina_mk1_ppds(struct platform_device *pd,
-					 struct net_device *mux)
+static void xeth_mux_platina_mk1_ppds(struct net_device *mux)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
-	static const u8 const bus[][32] = {
+	static u8 pa[32][ETH_ALEN];
+	static struct property_entry props[32][3] = {
 		[0] = {
-			 2,  3,  4,  5,  6,  7,  8,  9,
-			11, 12, 13, 14, 15, 16, 17, 18,
-			20, 21, 22, 23, 24, 25, 26, 27,
-			29, 30, 31, 32, 33, 34, 35, 36,
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[0]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 3),
 		},
 		[1] = {
-			 3,  2,  5,  4,  7,  6,  9,  8,
-			12, 11, 14, 13, 16, 15, 18, 17,
-			21, 20, 23, 22, 25, 24, 27, 26,
-			30, 29, 32, 31, 34, 33, 36, 35,
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[1]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 2),
+		},
+		[2] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[2]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 5),
+		},
+		[3] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[3]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 4),
+		},
+		[4] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[4]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 7),
+		},
+		[5] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[5]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 6),
+		},
+		[6] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[6]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 9),
+		},
+		[7] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[7]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 8),
+		},
+		[8] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[8]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 12),
+		},
+		[9] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[9]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 11),
+		},
+		[10] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[10]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 14),
+		},
+		[11] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[11]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 13),
+		},
+		[12] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[12]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 16),
+		},
+		[13] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[13]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 15),
+		},
+		[14] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[14]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 18),
+		},
+		[15] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[15]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 17),
+		},
+		[16] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[16]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 21),
+		},
+		[17] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[17]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 20),
+		},
+		[18] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[18]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 23),
+		},
+		[19] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[19]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 22),
+		},
+		[20] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[20]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 25),
+		},
+		[21] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[21]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 24),
+		},
+		[22] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[22]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 27),
+		},
+		[23] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[23]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 26),
+		},
+		[24] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[24]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 30),
+		},
+		[25] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[25]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 29),
+		},
+		[26] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[26]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 32),
+		},
+		[27] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[27]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 31),
+		},
+		[28] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[28]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 34),
+		},
+		[29] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[29]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 33),
+		},
+		[30] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[30]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 36),
+		},
+		[31] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[31]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 35),
 		},
 	};
-	static struct property_entry props[32][4];
+	static struct property_entry alpha_props[32][3] = {
+		[0] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[0]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 2),
+		},
+		[1] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[1]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 3),
+		},
+		[2] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[2]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 4),
+		},
+		[3] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[3]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 5),
+		},
+		[4] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[4]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 6),
+		},
+		[5] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[5]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 7),
+		},
+		[6] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[6]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 8),
+		},
+		[7] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[7]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 9),
+		},
+		[8] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[8]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 11),
+		},
+		[9] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[9]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 12),
+		},
+		[10] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[10]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 13),
+		},
+		[11] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[11]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 14),
+		},
+		[12] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[12]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 15),
+		},
+		[13] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[13]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 16),
+		},
+		[14] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[14]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 17),
+		},
+		[15] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[15]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 18),
+		},
+		[16] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[16]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 20),
+		},
+		[17] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[17]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 21),
+		},
+		[18] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[18]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 22),
+		},
+		[19] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[19]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 23),
+		},
+		[20] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[20]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 24),
+		},
+		[21] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[21]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 25),
+		},
+		[22] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[22]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 26),
+		},
+		[23] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[23]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 27),
+		},
+		[24] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[24]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 29),
+		},
+		[25] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[25]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 30),
+		},
+		[26] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[26]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 31),
+		},
+		[27] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[27]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 32),
+		},
+		[28] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[28]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 33),
+		},
+		[29] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[29]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 34),
+		},
+		[30] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[30]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 35),
+		},
+		[31] = {
+			PROPERTY_ENTRY_U8_ARRAY("mac-address", pa[31]),
+			PROPERTY_ENTRY_U8("qsfp-bus", 36),
+		},
+	};
 	static struct platform_device_info info[32];
-	u64 base_port_addr = 2 + ether_addr_to_u64(mux->dev_addr);
 	int port;
+	u64 ea;
 
-	for (port = 0; port < 32; port++) {
+	ea = 2 + ether_addr_to_u64(mux->dev_addr);
+	for (port = 0; port < 32; port++, ea++) {
 		struct platform_device *ppd;
 
-		props[port][0].name = "mux";
-		props[port][0].length = sizeof("platina-mk1");
-		props[port][0].type = DEV_PROP_STRING;
-		props[port][0].value.str = "platina-mk1";
-		props[port][1].name = "addr";
-		props[port][1].length = sizeof(u64);
-		props[port][1].type = DEV_PROP_U64;
-		props[port][1].value.u64_data = base_port_addr + (port * 4);
-		props[port][2].name = "qsfp-bus";
-		props[port][2].length = sizeof(u8);
-		props[port][2].type = DEV_PROP_U8;
-		props[port][2].value.u8_data = bus[priv->base_port][port];
+		u64_to_ether_addr(ea, pa[port]);
 
+		info[port].parent = &priv->pd->dev;
 		info[port].name = "xeth-port";
 		info[port].id = port;
-		info[port].properties = props[port];
+		info[port].properties = priv->base_port ?
+			props[port] : alpha_props[port];
 
 		ppd = platform_device_register_full(&info[port]);
 		if (IS_ERR(ppd)) {
-			xeth_nd_err(mux, "make:xeth.%d: %ld",
-				    info[port].id, PTR_ERR(ppd));
+			xeth_nd_err(mux, "make:xeth-port.%d: %ld",
+				    port, PTR_ERR(ppd));
 			return;
 		}
 		priv->ppds[port] = ppd;
@@ -1568,6 +1815,7 @@ static void xeth_mux_mk_platina_mk1_ppds(struct platform_device *pd,
 
 static int xeth_mux_probe(struct platform_device *pd)
 {
+	struct device *dev = &pd->dev;
 	struct net_device *links[xeth_mux_max_links];
 	char ifname[IFNAMSIZ];
 	struct net_device *mux;
@@ -1575,26 +1823,26 @@ static int xeth_mux_probe(struct platform_device *pd)
 	ssize_t n_links, n_ppds;
 	size_t sz;
 	int i, err;
-	void (*mk_ppds)(struct platform_device *pd, struct net_device *mux);
+	void (*mk_ppds)(struct net_device *mux);
 
 	rtnl_lock();
-	if (xeth_mux_is_platina_mk1(pd)) {
+	if (xeth_mux_is_platina_mk1(dev)) {
 		n_ppds = 32;
-		mk_ppds = xeth_mux_mk_platina_mk1_ppds;
+		mk_ppds = xeth_mux_platina_mk1_ppds;
 	} else {
 		n_ppds = 32;
 		mk_ppds = NULL;
 	}
 
-	n_links = xeth_mux_link_addrs(pd, links);
+	n_links = xeth_mux_link_addrs(dev, links);
 	if (n_links == 0)
-		n_links = xeth_mux_link_akas(pd, links);
+		n_links = xeth_mux_link_akas(dev, links);
 	if (n_links < 0)
 		return xeth_rtnl_unlock(n_links);
 	else if (n_links == 0)
 		xeth_debug("no links?");
 
-	xeth_mux_name(pd, ifname);
+	xeth_mux_ifname(dev, ifname);
 
 	sz = sizeof(*priv) + (n_ppds * sizeof(struct platform_device *));
 	mux = alloc_netdev_mqs(sz, ifname, NET_NAME_ENUM,
@@ -1608,15 +1856,16 @@ static int xeth_mux_probe(struct platform_device *pd)
 	}
 
 	priv = netdev_priv(mux);
+	priv->pd = pd;
 	priv->nd = mux;
-	priv->encap = xeth_mux_encap_prop(pd);
-	priv->base_port = xeth_mux_base_port_prop(pd);
-	priv->ports = xeth_mux_ports_prop(pd);
+	priv->encap = xeth_mux_encap_prop(dev);
+	priv->base_port = xeth_mux_base_port_prop(dev);
+	priv->ports = xeth_mux_ports_prop(dev);
 	priv->priv_flags.named =
-		xeth_mux_flags_prop(pd, priv->priv_flags.names);
+		xeth_mux_flags_prop(dev, priv->priv_flags.names);
 	priv->stat_name.named =
-		xeth_mux_stats_prop(pd, priv->stat_name.names);
-	xeth_mux_qsfp_i2c_addrs_prop(pd, priv->qsfp_i2c_addrs);
+		xeth_mux_stats_prop(dev, priv->stat_name.names);
+	xeth_mux_qsfp_i2c_addrs_prop(dev, priv->qsfp_i2c_addrs);
 
 	if (n_links > 0)
 		eth_hw_addr_inherit(mux, links[0]);
@@ -1647,17 +1896,17 @@ static int xeth_mux_probe(struct platform_device *pd)
 	platform_set_drvdata(pd, mux);
 
 	priv->absent_gpios =
-		gpiod_get_array_optional(&pd->dev, "absent", GPIOD_IN);
+		gpiod_get_array_optional(dev, "absent", GPIOD_IN);
 	priv->intr_gpios =
-		gpiod_get_array_optional(&pd->dev, "int", GPIOD_IN);
+		gpiod_get_array_optional(dev, "int", GPIOD_IN);
 	priv->lpmode_gpios =
-		gpiod_get_array_optional(&pd->dev, "lpmode", GPIOD_OUT_HIGH);
+		gpiod_get_array_optional(dev, "lpmode", GPIOD_OUT_HIGH);
 	priv->reset_gpios =
-		gpiod_get_array_optional(&pd->dev, "reset", GPIOD_OUT_LOW);
+		gpiod_get_array_optional(dev, "reset", GPIOD_OUT_LOW);
 
 	if (n_ppds) {
 		priv->n_ppds = n_ppds;
-		mk_ppds(pd, mux);
+		mk_ppds(mux);
 	}
 
 	return xeth_rtnl_unlock(0);
