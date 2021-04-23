@@ -21,3 +21,5 @@
 /dkms/xeth.mod.c
 /dkms/xeth_version.mk
 /go/xeth/_obj/
+/sample-xeth-switchd
+/go/sample-xeth-switchd/sample-xeth-switchd
