@@ -568,47 +568,47 @@ xeth_mux_flag_ops(inet6addr_notifier)
 xeth_mux_flag_ops(netdevice_notifier)
 xeth_mux_flag_ops(netevent_notifier)
 
-struct xeth_muxfibnet {
+struct xeth_fibmuxnet {
 	struct list_head list;
-	struct net_device *mux;
 	struct notifier_block fib;
+	struct net_device *mux;
 	struct net *net;
 };
 
 static inline void xeth_mux_fib_cb(struct notifier_block *fib)
 {
-	struct xeth_muxfibnet *mfn = container_of(fib, typeof(*mfn), fib);
-	xeth_nd_debug(mfn->mux, "registered fib notifier");
+	struct xeth_fibmuxnet *fmn = container_of(fib, typeof(*fmn), fib);
+	xeth_nd_debug(fmn->mux, "registered fib notifier");
 }
 
 static inline struct net *
-xeth_muxfibnet_net(struct xeth_muxfibnet *mfn,
+xeth_fibmuxnet_net(struct xeth_fibmuxnet *fmn,
 		   struct fib_notifier_info *info)
 {
 	return
 #if defined(fib_notifier_info_with_net)
 	info->net;
 #else
-	mfn->net;
+	fmn->net;
 #endif
 }
 
-static inline int xeth_muxfibnet_register(struct xeth_muxfibnet *mfn)
+static inline int xeth_fibmuxnet_register(struct xeth_fibmuxnet *fmn)
 {
 	return
 #if defined(fib_notifier_info_with_net)
-	register_fib_notifier(&mfn->fib, xeth_mux_fib_cb);
+	register_fib_notifier(&fmn->fib, xeth_mux_fib_cb);
 #else
-	register_fib_notifier(mfn->net, &mfn->fib, xeth_mux_fib_cb, NULL);
+	register_fib_notifier(fmn->net, &fmn->fib, xeth_mux_fib_cb, NULL);
 #endif
 }
 
-static inline void xeth_muxfibnet_unregister(struct xeth_muxfibnet *mfn)
+static inline void xeth_fibmuxnet_unregister(struct xeth_fibmuxnet *fmn)
 {
 #if defined(fib_notifier_info_with_net)
-	unregister_fib_notifier(&mfn->fib);
+	unregister_fib_notifier(&fmn->fib);
 #else
-	unregister_fib_notifier(mfn->net, &mfn->fib);
+	unregister_fib_notifier(fmn->net, &fmn->fib);
 #endif
 }
 

@@ -14,9 +14,9 @@
 static int xeth_nb_fib(struct notifier_block *fib, unsigned long event,
 		       void *ptr)
 {
-	struct xeth_muxfibnet *mfn = container_of(fib, typeof(*mfn), fib);
+	struct xeth_fibmuxnet *fmn = container_of(fib, typeof(*fmn), fib);
 	struct fib_notifier_info *info = ptr;
-	struct net *net = xeth_muxfibnet_net(mfn, info);
+	struct net *net = xeth_fibmuxnet_net(fmn, info);
 	struct fib_entry_notifier_info *feni;
 	struct fib6_entry_notifier_info *f6eni;
 
@@ -30,11 +30,11 @@ static int xeth_nb_fib(struct notifier_block *fib, unsigned long event,
 		switch (info->family) {
 		case AF_INET:
 			feni = container_of(info, typeof(*feni), info);
-			xeth_sbtx_fib_entry(mfn->mux, net, feni, event);
+			xeth_sbtx_fib_entry(fmn->mux, net, feni, event);
 			break;
 		case AF_INET6:
 			f6eni = container_of(info, typeof(*f6eni), info);
-			xeth_sbtx_fib6_entry(mfn->mux, net, f6eni, event);
+			xeth_sbtx_fib6_entry(fmn->mux, net, f6eni, event);
 			break;
 		}
 		break;
@@ -189,19 +189,20 @@ static int xeth_nb_start_fib(struct net_device *mux, struct net *net)
 {
 	int err;
 	struct xeth_nb *nb = xeth_mux_nb(mux);
-	struct xeth_muxfibnet *mfn;
+	struct xeth_fibmuxnet *fmn;
 
-	list_for_each_entry(mfn, &nb->fibs, list)
-		if (mfn->net == net)
+	list_for_each_entry(fmn, &nb->fibs, list)
+		if (fmn->net == net)
 			return -EBUSY;
-	mfn = devm_kzalloc(&mux->dev, sizeof(*mfn), GFP_KERNEL);
-	if (!mfn)
+	fmn = devm_kzalloc(&mux->dev, sizeof(*fmn), GFP_KERNEL);
+	if (!fmn)
 		return -ENOMEM;
-	mfn->fib.notifier_call = xeth_nb_fib;
-	mfn->net = net;
-	err = xeth_muxfibnet_register(mfn);
+	fmn->fib.notifier_call = xeth_nb_fib;
+	fmn->mux = mux;
+	fmn->net = net;
+	err = xeth_fibmuxnet_register(fmn);
 	if (!err)
-		list_add_tail(&mfn->list, &nb->fibs);
+		list_add_tail(&fmn->list, &nb->fibs);
 	return err;
 }
 
@@ -233,23 +234,23 @@ int xeth_nb_start_all_fib(struct net_device *mux)
 void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net)
 {
 	struct xeth_nb *nb = xeth_mux_nb(mux);
-	struct xeth_muxfibnet *mfn, *tmp;
+	struct xeth_fibmuxnet *fmn, *tmp;
 
-	list_for_each_entry_safe(mfn, tmp, &nb->fibs, list)
-		if (mfn->net == net) {
-			xeth_muxfibnet_unregister(mfn);
-			list_del(&mfn->list);
+	list_for_each_entry_safe(fmn, tmp, &nb->fibs, list)
+		if (fmn->net == net) {
+			xeth_fibmuxnet_unregister(fmn);
+			list_del(&fmn->list);
 		}
 }
 
 void xeth_nb_stop_all_fib(struct net_device *mux)
 {
 	struct xeth_nb *nb = xeth_mux_nb(mux);
-	struct xeth_muxfibnet *mfn, *tmp;
+	struct xeth_fibmuxnet *fmn, *tmp;
 
-	list_for_each_entry_safe(mfn, tmp, &nb->fibs, list) {
-		xeth_muxfibnet_unregister(mfn);
-		list_del(&mfn->list);
+	list_for_each_entry_safe(fmn, tmp, &nb->fibs, list) {
+		xeth_fibmuxnet_unregister(fmn);
+		list_del(&fmn->list);
 	}
 }
 
