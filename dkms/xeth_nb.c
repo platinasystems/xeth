@@ -212,7 +212,7 @@ int xeth_nb_start_new_fib(struct net_device *mux, struct net *net)
 	struct xeth_nb *nb = xeth_mux_nb(mux);
 
 	/* don't start fib notifications on new nets until DUMP_FIBINFO */
-	if (list_empty(&nb->fibs))
+	if (!list_empty(&nb->fibs))
 		return xeth_nd_prif_err(mux, xeth_nb_start_fib(mux, net));
 #endif
 	return 0;
