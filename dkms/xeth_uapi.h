@@ -38,6 +38,38 @@
 # define XETH_VLAN_N_VID 4096
 #endif
 
+#ifdef VLAN_PRIO_SHIFT
+# define XETH_VLAN_PRIO_SHIFT VLAN_PRIO_SHIFT
+#else
+# define XETH_VLAN_PRIO_SHIFT 13
+#endif
+
+#define XETH_VLAN_PRIO_BITS	3
+#define XETH_VLAN_PRIO_MAX	((1 << XETH_VLAN_PRIO_BITS) - 1)
+
+#ifdef VLAN_PRIO_MASK
+# define XETH_VLAN_PRIO_MASK VLAN_PRIO_MASK
+#else
+# define XETH_VLAN_PRIO_MASK (XETH_VLAN_PRIO_MAX << XETH_VLAN_PRIO_SHIFT)
+#endif
+
+static inline bool xeth_vlan_tci_is_exception(uint16_t tci)
+{
+	return (tci & XETH_VLAN_PRIO_MASK) == XETH_VLAN_PRIO_MASK;
+}
+
+#ifdef VLAN_CFI_MASK
+# define XETH_VLAN_CFI_MASK VLAN_CFI_MASK
+#else
+# define XETH_VLAN_CFI_MASK 0x1000
+#endif
+
+#ifdef VLAN_TAG_PRESENT
+# define XETH_VLAN_TAG_PRESENT VLAN_TAG_PRESENT
+#else
+# define XETH_VLAN_TAG_PRESENT XETH_VLAN_CFI_MASK
+#endif
+
 enum xeth_msg_version {
 	XETH_MSG_VERSION = 2,
 };

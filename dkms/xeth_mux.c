@@ -929,16 +929,22 @@ static int xeth_mux_link_hash_vlan(struct sk_buff *skb)
 	return vlan_get_tag(skb, &tci) ? 0 : tci & 1;
 }
 
-static void xeth_mux_vlan_exception(struct net_device *mux, struct sk_buff *skb)
+static bool xeth_mux_was_vlan_exception(struct net_device *mux,
+					struct sk_buff *skb)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
 	atomic64_t *counters = priv->counters;
 	struct vlan_ethhdr *veh = (struct vlan_ethhdr *)skb->data;
+	__be16 h_vlan_proto, h_vlan_encapsulated_proto;
+	u16 tci;
 
-	__be16 h_vlan_proto = veh->h_vlan_proto;
-	u16 tci = be16_to_cpu(veh->h_vlan_TCI);
-	__be16 h_vlan_encapsulated_proto =
-		veh->h_vlan_encapsulated_proto;
+	if (!eth_type_vlan(veh->h_vlan_proto))
+		return false;
+	h_vlan_proto = veh->h_vlan_proto;
+	h_vlan_encapsulated_proto = veh->h_vlan_encapsulated_proto;
+	tci = be16_to_cpu(veh->h_vlan_TCI);
+	if (!xeth_vlan_tci_is_exception(tci))
+		return false;
 	xeth_mux_inc__ex_frames(counters);
 	xeth_mux_add__ex_bytes(counters, skb->len);
 	eth_type_trans(skb, mux);
@@ -947,22 +953,7 @@ static void xeth_mux_vlan_exception(struct net_device *mux, struct sk_buff *skb)
 	skb->protocol = h_vlan_encapsulated_proto;
 	skb_pull_inline(skb, VLAN_HLEN);
 	xeth_mux_demux_vlan(mux, skb);
-}
-
-static bool xeth_mux_was_vlan_exception(struct net_device *mux,
-					struct sk_buff *skb)
-{
-	const u16 expri = 7 << VLAN_PRIO_SHIFT;
-	struct vlan_ethhdr *veh = (struct vlan_ethhdr *)skb->data;
-
-	if (eth_type_vlan(veh->h_vlan_proto)) {
-		u16 pri = be16_to_cpu(veh->h_vlan_TCI) & VLAN_PRIO_MASK;
-		if (pri == expri) {
-			xeth_mux_vlan_exception(mux, skb);
-			return true;
-		}
-	}
-	return false;
+	return true;
 }
 
 static netdev_tx_t xeth_mux_vlan_xmit(struct sk_buff *skb,
