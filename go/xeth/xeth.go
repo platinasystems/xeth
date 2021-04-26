@@ -3,54 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // This package provides a sideband control interface to an XETH driver.
-// Usage,
-//	task, err := xeth.Start(dev, wg, stop)
-//	if err {
-//		panic(err)
-//	}
-//	task.DumpIfInfo()
-//	for t = true; t; {
-//		select {
-//		case <-task.Stop:
-//			return
-//		case buf := <-task.RxCh:
-//			if t = xeth.Class(buf) != xeth.ClassBreak; t {
-//				msg := xeth.Parse(buf)
-//				...
-//				xeth.Pool(msg)
-//			}
-//		}
-//	}
-//	...
-//	task.DumpFib()
-//	for t := true; t; {
-//		select {
-//		case <-task.Stop:
-//			return
-//		case buf := <-task.RxCh:
-//			if t = xeth.Class(buf) != xeth.ClassBreak; t {
-//				msg := xeth.Parse(buf)
-//				...
-//				xeth.Pool(msg)
-//			}
-//		}
-//	}
-//	...
-//	task.WG.Add(1)
-//	go func() {
-//		defer task.WG.Done()
-//		for {
-//			select {
-//			case <-task.Stop:
-//				return
-//			case buf := <-task.RxCh:
-//				msg := xeth.Parse(buf)
-//				...
-//				xeth.Pool(msg)
-//			}
-//		}
-//	}()
-//	...
+// See sample-xeth-switchd
 package xeth
 
 import (
@@ -75,29 +28,37 @@ import (
 const unixpacket = "unixpacket"
 
 const (
-	ClassUnknown = iota
-	ClassBreak
-	ClassInterface
-	ClassAddress
-	ClassFib
-	ClassNeighbor
-	ClassNetNs
+	VLAN_TPID0 = (2 * syscall.ARPHRD_IEEE802) + iota
+	VLAN_TPID1
+	VLAN_TCI0
+	VLAN_TCI1
 )
-
-const (
-	VLAN_PRIO_MASK   = 0xe000
-	VLAN_PRIO_SHIFT  = 13
-	VLAN_CFI_MASK    = 0x1000
-	VLAN_TAG_PRESENT = VLAN_CFI_MASK
-)
-
-type pooler interface {
-	Pool()
-}
 
 type Break struct{}
 
 type Buffer interface{ buffer }
+
+type Frame struct{ Buffer }
+
+func (f Frame) Dst() net.HardwareAddr {
+	return net.HardwareAddr(f.bytes()[:internal.SizeofEthAddr])
+}
+
+func (f Frame) Loopback(task *Task) {
+	task.ExceptionFrame(f.bytes())
+}
+
+func (f Frame) Xid(set ...Xid) (xid Xid) {
+	b := f.bytes()
+	if len(set) > 0 {
+		xid = set[0]
+		b[VLAN_TCI0] = byte(xid >> 8)
+		b[VLAN_TCI1] = byte(xid & 0xff)
+	} else {
+		xid = (Xid(b[VLAN_TCI0]) << 8) | Xid(b[VLAN_TCI1])
+	}
+	return
+}
 
 var (
 	Cloned  Counter // cloned received messages
@@ -206,9 +167,10 @@ func Start(dev string, wg *sync.WaitGroup,
 		},
 	}
 
-	task.WG.Add(3)
+	task.WG.Add(4)
 	go task.goRx(rxch)
 	go task.goTx(loch, hich)
+	go task.goRawRx(rxch)
 	go task.goClose()
 
 	return
@@ -218,34 +180,14 @@ func kind(buf buffer) uint8 {
 	return (*internal.MsgHeader)(buf.pointer()).Kind
 }
 
-func Class(buf Buffer) int {
-	switch kind(buf) {
-	case internal.MsgKindBreak:
-		return ClassBreak
-	case internal.MsgKindChangeUpperXid,
-		internal.MsgKindEthtoolFlags,
-		internal.MsgKindEthtoolLinkModesSupported,
-		internal.MsgKindEthtoolLinkModesAdvertising,
-		internal.MsgKindEthtoolLinkModesLPAdvertising,
-		internal.MsgKindEthtoolSettings,
-		internal.MsgKindIfInfo:
-		return ClassInterface
-	case internal.MsgKindIfa, internal.MsgKindIfa6:
-		return ClassAddress
-	case internal.MsgKindFibEntry, internal.MsgKindFib6Entry:
-		return ClassFib
-	case internal.MsgKindNeighUpdate:
-		return ClassNeighbor
-	case internal.MsgKindNetNsAdd, internal.MsgKindNetNsDel:
-		return ClassNetNs
-	default:
-		return ClassUnknown
-	}
-}
-
 // parse driver message and cache ifinfo in xid maps.
 func Parse(buf Buffer) interface{} {
 	defer Parsed.Inc()
+	for _, b := range buf.bytes()[:14] {
+		if b != 0 {
+			return Frame{buf}
+		}
+	}
 	defer buf.pool()
 	switch k := kind(buf); k {
 	case internal.MsgKindBreak:
@@ -332,9 +274,12 @@ func Parse(buf Buffer) interface{} {
 	return nil
 }
 
-func Pool(msg interface{}) {
-	if method, found := msg.(pooler); found {
+func Pool(v interface{}) {
+	if method, found := v.(interface{ Pool() }); found {
 		method.Pool()
+	}
+	if method, found := v.(interface{ pool() }); found {
+		method.pool()
 	}
 }
 
@@ -356,14 +301,9 @@ func (task *Task) DumpIfInfo() {
 
 // Send an exception frame to driver through raw socket.
 func (task *Task) ExceptionFrame(b []byte) {
-	const (
-		hitci = (2 * syscall.ARPHRD_IEEE802) + 2
-		lotci = hitci + 1
-		prio  = (7 << (VLAN_PRIO_SHIFT - 8))
-	)
 	// set priority so that the xeth will forward to the
 	// respective upper device rather than it's port
-	b[hitci] |= prio
+	b[VLAN_TCI0] |= VlanPrioMask >> 8
 	syscall.Sendto(task.fd, b, 0, &task.fda)
 }
 
@@ -428,6 +368,24 @@ func (task *Task) goClose() {
 	}
 	sock.Close()
 	syscall.Close(task.fd)
+}
+
+func (task *Task) goRawRx(rxch chan<- Buffer) {
+	defer task.WG.Done()
+
+	rxbuf := make([]byte, internal.SizeofJumboFrame)
+	for {
+		n, _, err := syscall.Recvfrom(task.fd, rxbuf, 0)
+		if err != nil {
+			e, ok := err.(*os.SyscallError)
+			if !ok || e.Err.Error() != "EOF" {
+				task.RxErr = err
+			}
+			return
+		}
+		rxch <- cloneBuffer(rxbuf[:n])
+		Cloned.Inc()
+	}
 }
 
 func (task *Task) goRx(rxch chan<- Buffer) {

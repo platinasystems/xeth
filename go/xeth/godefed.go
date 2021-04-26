@@ -5,7 +5,15 @@ package xeth
 const (
 	VlanVidMask	= 0xfff
 	VlanNVid	= 0x1000
+	VlanPrioShift	= 0xd
+	VlanPrioMask	= 0xe000
+	VlanCfiMask	= 0x1000
+	VlanTagPresent	= 0x1000
 )
+
+func VlanTciIsException(tci uint16) bool {
+	return (tci & VlanPrioMask) == VlanPrioMask
+}
 
 const (
 	EncapVlan	= 0x0

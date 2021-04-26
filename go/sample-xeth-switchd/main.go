@@ -25,6 +25,7 @@ func main() {
 		syscall.SIGHUP,
 		syscall.SIGQUIT)
 	defer signal.Stop(sigch)
+	xidOfDst := make(map[string]xeth.Xid)
 
 	if *flagLicense {
 		log.WriteString(License[1:])
@@ -54,20 +55,35 @@ selector:
 			break selector
 		case <-task.Stop:
 			break selector
-		case buf := <-task.RxCh:
-			if task.RxErr != nil {
+		case buf, ok := <-task.RxCh:
+			if !ok {
 				close(stopch)
-				panic(task.RxErr)
+				if task.RxErr != nil {
+					panic(task.RxErr)
+				}
+				break selector
 			}
-			if xeth.Class(buf) == xeth.ClassBreak {
+			msg := xeth.Parse(buf)
+			switch t := msg.(type) {
+			case xeth.Frame:
+				xid, found := xidOfDst[t.Dst().String()]
+				if found {
+					t.Xid(xid)
+					t.Loopback(task)
+				}
+			case xeth.Break:
 				if *flagDumpFib {
 					*flagDumpFib = false
 					task.DumpFib()
 				}
-				continue
+			case xeth.DevNew:
+				xid := xeth.Xid(t)
+				ha := xeth.LinkOf(xid).IfInfoHardwareAddr()
+				xidOfDst[ha.String()] = xid
+				verbose(msg)
+			default:
+				verbose(msg)
 			}
-			msg := xeth.Parse(buf)
-			verbose(msg)
 			xeth.Pool(msg)
 		}
 	}

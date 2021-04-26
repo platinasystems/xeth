@@ -125,9 +125,7 @@ func RxDelete(xid Xid) (note DevDel) {
 	}
 	l.Range(func(key, value interface{}) bool {
 		defer l.Delete(key)
-		if method, found := value.(pooler); found {
-			method.Pool()
-		}
+		Pool(value)
 		return true
 	})
 	return

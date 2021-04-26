@@ -14,9 +14,17 @@ typedef uint64_t u64;
 import "C"
 
 const (
-	VlanVidMask = C.XETH_VLAN_VID_MASK
-	VlanNVid    = C.XETH_VLAN_N_VID
+	VlanVidMask    = C.XETH_VLAN_VID_MASK
+	VlanNVid       = C.XETH_VLAN_N_VID
+	VlanPrioShift  = C.XETH_VLAN_PRIO_SHIFT
+	VlanPrioMask   = C.XETH_VLAN_PRIO_MASK
+	VlanCfiMask    = C.XETH_VLAN_CFI_MASK
+	VlanTagPresent = C.XETH_VLAN_TAG_PRESENT
 )
+
+func VlanTciIsException(tci uint16) bool {
+	return (tci & VlanPrioMask) == VlanPrioMask
+}
 
 const (
 	EncapVlan = C.XETH_ENCAP_VLAN
