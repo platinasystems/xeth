@@ -1,3 +1,20 @@
+xeth (3.0.2.3) stretch; urgency=medium
+
+  [ Tom Grennan ]
+  * fixes for linux >v5.4 and gcc 8.3.0
+
+  [ Kevin Paul Herbert ]
+  * dkms: Allow all kernels 5.4+
+
+  [ Tom Grennan ]
+  * fix fibinfo dump
+  * add sample-xeth-switchd
+  * pass kernel vlan defs through uapi
+  * add frame handler to sample switchd
+  * correct start_new_fib notification qualifier
+
+ -- Kevin Paul Herbert <kph@platinasystems.com>  Mon, 26 Apr 2021 22:46:59 -0700
+
 xeth (3.0.2.2) stretch; urgency=medium
 
   [ Tom Grennan ]
