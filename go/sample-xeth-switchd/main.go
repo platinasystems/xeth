@@ -13,32 +13,26 @@ import (
 	"github.com/platinasystems/xeth/v3/go/xeth"
 )
 
-var log = os.Stdout
-
 func main() {
 	var wg sync.WaitGroup
 	stopch := make(chan struct{})
 	sigch := make(chan os.Signal, 1)
+	xidOfDst := make(map[string]xeth.Xid)
+
+	if len(*flagLog) > 0 {
+		defer log.Close()
+	}
+	if *flagLicense {
+		os.Stdout.WriteString(License[1:])
+		return
+	}
+
 	signal.Notify(sigch,
 		syscall.SIGTERM,
 		syscall.SIGINT,
 		syscall.SIGHUP,
 		syscall.SIGQUIT)
 	defer signal.Stop(sigch)
-	xidOfDst := make(map[string]xeth.Xid)
-
-	if *flagLicense {
-		log.WriteString(License[1:])
-		return
-	}
-	if len(*flagLog) > 0 {
-		f, err := os.Create(*flagLog)
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
-		log = f
-	}
 
 	task, err := xeth.Start(*flagMux, &wg, stopch)
 	if err != nil {

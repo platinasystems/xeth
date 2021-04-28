@@ -4,7 +4,11 @@
 
 package main
 
-import "flag"
+import (
+	"flag"
+	"fmt"
+	"os"
+)
 
 var (
 	flagDebug   = flag.Bool("debug", false, "print debug messages")
@@ -15,4 +19,45 @@ var (
 	flagVerbose = flag.Bool("verbose", false, "print xeth messages")
 )
 
-func init() { flag.Parse() }
+var (
+	log   = os.Stdout
+	debug = func(args ...interface{}) (int, error) {
+		return 0, nil
+	}
+	debugf = func(format string, args ...interface{}) (int, error) {
+		return 0, nil
+	}
+	verbose = func(args ...interface{}) (int, error) {
+		return 0, nil
+	}
+	verbosef = func(format string, args ...interface{}) (int, error) {
+		return 0, nil
+	}
+)
+
+func init() {
+	flag.Parse()
+	if *flagDebug {
+		debug = func(args ...interface{}) (int, error) {
+			return fmt.Fprintln(log, args...)
+		}
+		debugf = func(format string, args ...interface{}) (int, error) {
+			return fmt.Fprintf(log, format+"\n", args...)
+		}
+	}
+	if *flagVerbose {
+		verbose = func(args ...interface{}) (int, error) {
+			return fmt.Fprintln(log, args...)
+		}
+		verbosef = func(format string, args ...interface{}) (int, error) {
+			return fmt.Fprintf(log, format+"\n", args...)
+		}
+	}
+	if len(*flagLog) > 0 {
+		f, err := os.Create(*flagLog)
+		if err != nil {
+			panic(err)
+		}
+		log = f
+	}
+}
