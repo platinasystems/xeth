@@ -29,6 +29,7 @@ func RxIfInfo(msg *internal.MsgIfInfo) (note interface{}) {
 		l.xid = xid
 		Links.Store(xid, l)
 	}
+	l.IfInfoKdata(msg.Kdata)
 	if len(l.IfInfoName()) == 0 {
 		note = DevNew(xid)
 		name := make([]byte, internal.SizeofIfName)

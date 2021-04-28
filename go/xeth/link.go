@@ -24,6 +24,7 @@ type Linker interface {
 	EthtoolDevPort(set ...DevPort) DevPort
 	EthtoolFlags(set ...EthtoolFlagBits) EthtoolFlagBits
 	EthtoolSpeed(set ...uint32) uint32
+	IfInfoKdata(set ...uint32) uint32
 	IfInfoName(set ...string) string
 	IfInfoIfIndex(set ...int32) int32
 	IfInfoNetNs(set ...NetNs) NetNs
@@ -60,6 +61,7 @@ const (
 	LinkAttrEthtoolFlags
 	LinkAttrEthtoolSpeed
 	LinkAttrIPNets
+	LinkAttrIfInfoKdata
 	LinkAttrIfInfoName
 	LinkAttrIfInfoIfIndex
 	LinkAttrIfInfoNetNs
@@ -185,6 +187,16 @@ func (l *Link) EthtoolSpeed(set ...uint32) (mbps uint32) {
 		l.Store(LinkAttrEthtoolSpeed, mbps)
 	} else if v, ok := l.Load(LinkAttrEthtoolSpeed); ok {
 		mbps = v.(uint32)
+	}
+	return
+}
+
+func (l *Link) IfInfoKdata(set ...uint32) (kdata uint32) {
+	if len(set) > 0 {
+		kdata = set[0]
+		l.Store(LinkAttrIfInfoKdata, kdata)
+	} else if v, ok := l.Load(LinkAttrIfInfoKdata); ok {
+		kdata = v.(uint32)
 	}
 	return
 }
