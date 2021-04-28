@@ -18,6 +18,8 @@ type buffer interface {
 	pool()
 }
 
+type Buffer interface{ buffer }
+
 type b64 []byte
 type b128 []byte
 type b1024 []byte

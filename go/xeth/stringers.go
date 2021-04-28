@@ -425,3 +425,12 @@ func (scope RtScope) String() string {
 	}
 	return s
 }
+
+func (f Frame) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, f.Dst())
+	fmt.Fprint(w, " ", f.Src())
+	if xid := f.Xid(); xid != 0 {
+		fmt.Fprint(w, " {", xid, ")")
+	}
+	fmt.Fprint(w, " ", f.EthP())
+}

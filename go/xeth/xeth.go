@@ -24,41 +24,11 @@ import (
 
 //go:generate sh godef.sh godefs.go godefed.go
 //go:generate sh godef.sh internal/godefs.go internal/godefed.go
+//go:generate stringer -type=EthP -trimprefix=ETH_P_ ethp.go
 
 const unixpacket = "unixpacket"
 
-const (
-	VLAN_TPID0 = (2 * syscall.ARPHRD_IEEE802) + iota
-	VLAN_TPID1
-	VLAN_TCI0
-	VLAN_TCI1
-)
-
 type Break struct{}
-
-type Buffer interface{ buffer }
-
-type Frame struct{ Buffer }
-
-func (f Frame) Dst() net.HardwareAddr {
-	return net.HardwareAddr(f.bytes()[:internal.SizeofEthAddr])
-}
-
-func (f Frame) Loopback(task *Task) {
-	task.ExceptionFrame(f.bytes())
-}
-
-func (f Frame) Xid(set ...Xid) (xid Xid) {
-	b := f.bytes()
-	if len(set) > 0 {
-		xid = set[0]
-		b[VLAN_TCI0] = byte(xid >> 8)
-		b[VLAN_TCI1] = byte(xid & 0xff)
-	} else {
-		xid = (Xid(b[VLAN_TCI0]) << 8) | Xid(b[VLAN_TCI1])
-	}
-	return
-}
 
 var (
 	Cloned  Counter // cloned received messages
@@ -81,8 +51,8 @@ type Task struct {
 	RxErr error // error that stopped the rx service
 	TxErr error // error that stopped the tx service
 
-	fd  int
-	fda syscall.SockaddrLinklayer
+	muxfd int
+	muxsa syscall.SockaddrLinklayer
 }
 
 // Write provision value to platform device sysfs file
@@ -111,21 +81,25 @@ func Provision(dev, val string) error {
 }
 
 // Connect socket and run channel service routines.
-func Start(dev string, wg *sync.WaitGroup,
+func Start(mux string, wg *sync.WaitGroup,
 	stop <-chan struct{}) (task *Task, err error) {
-	muxif, err := net.InterfaceByName(dev)
+	muxif, err := net.InterfaceByName(mux)
 	if err != nil {
 		return
 	}
 
-	atsockaddr, err := net.ResolveUnixAddr(unixpacket, "@"+dev)
+	atsockaddr, err := net.ResolveUnixAddr(unixpacket, "@"+mux)
 	if err != nil {
 		return
 	}
 
 	muxfd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW,
-		syscall.ETH_P_ALL)
+		int(ETH_P_ALL.Network()))
 	if err != nil {
+		return
+	}
+	if err = syscall.BindToDevice(muxfd, mux); err != nil {
+		syscall.Close(muxfd)
 		return
 	}
 
@@ -153,14 +127,14 @@ func Start(dev string, wg *sync.WaitGroup,
 	rxch := make(chan Buffer, 1024)
 
 	task = &Task{
-		RxCh: rxch,
-		WG:   wg,
-		Stop: stop,
-		sock: atsock,
-		loch: loch,
-		hich: hich,
-		fd:   muxfd,
-		fda: syscall.SockaddrLinklayer{
+		RxCh:  rxch,
+		WG:    wg,
+		Stop:  stop,
+		sock:  atsock,
+		loch:  loch,
+		hich:  hich,
+		muxfd: muxfd,
+		muxsa: syscall.SockaddrLinklayer{
 			Protocol: syscall.ETH_P_ARP,
 			Ifindex:  muxif.Index,
 			Hatype:   syscall.ARPHRD_ETHER,
@@ -303,8 +277,8 @@ func (task *Task) DumpIfInfo() {
 func (task *Task) ExceptionFrame(b []byte) {
 	// set priority so that the xeth will forward to the
 	// respective upper device rather than it's port
-	b[VLAN_TCI0] |= VlanPrioMask >> 8
-	syscall.Sendto(task.fd, b, 0, &task.fda)
+	b[ETH_VLAN_TCI] |= VlanPrioMask >> 8
+	syscall.Sendto(task.muxfd, b, 0, &task.muxsa)
 }
 
 // Send carrier change to driver through hi-priority channel.
@@ -357,6 +331,9 @@ func (task *Task) goClose() {
 
 	<-task.Stop
 
+	if task.muxfd > 0 {
+		syscall.Close(task.muxfd)
+	}
 	if task.sock == nil {
 		return
 	}
@@ -367,7 +344,6 @@ func (task *Task) goClose() {
 		syscall.Shutdown(int(f.Fd()), SHUT_RDWR)
 	}
 	sock.Close()
-	syscall.Close(task.fd)
 }
 
 func (task *Task) goRawRx(rxch chan<- Buffer) {
@@ -375,7 +351,13 @@ func (task *Task) goRawRx(rxch chan<- Buffer) {
 
 	rxbuf := make([]byte, internal.SizeofJumboFrame)
 	for {
-		n, _, err := syscall.Recvfrom(task.fd, rxbuf, 0)
+		select {
+		case <-task.Stop:
+			return
+		default:
+		}
+		// FIXME timeout through sockopt or select
+		n, from, err := syscall.Recvfrom(task.muxfd, rxbuf, 0)
 		if err != nil {
 			e, ok := err.(*os.SyscallError)
 			if !ok || e.Err.Error() != "EOF" {
@@ -383,8 +365,11 @@ func (task *Task) goRawRx(rxch chan<- Buffer) {
 			}
 			return
 		}
-		rxch <- cloneBuffer(rxbuf[:n])
-		Cloned.Inc()
+		sa, ok := from.(*syscall.SockaddrLinklayer)
+		if ok && sa.Ifindex == task.muxsa.Ifindex {
+			rxch <- cloneBuffer(rxbuf[:n])
+			Cloned.Inc()
+		}
 	}
 }
 
