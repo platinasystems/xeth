@@ -22,7 +22,10 @@ bindeb-pkg:
 	$(call svo, DEBUILD,\
 		debuild -uc -us -ui -b --lintian-opts --profile debian)
 
-clean: files = $(wildcard README.html)
+sample-xeth-switchd: FORCE
+	$(call svo, GOBUILD,go build ./go/$@)
+
+clean: files = $(wildcard README.html sample-xeth-switchd)
 clean:
 	$(call svo, DKMS, $(MAKE) -C dkms, $@)
 	$(if $(files),$(call svo, CLEAN, rm, $(files)))
@@ -35,3 +38,5 @@ modules modules_install:
 .PHONY: default bindeb-pkg clean docs modules modules_install
 
 %.html: %.md ; pandoc --from gfm --to html -o $@ $<
+
+FORCE: ;
