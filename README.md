@@ -146,7 +146,7 @@ The switch daemon or driver provides this to the `xeth-mux`:
 
 * port carrier state
 * port ethtool stats
-* proxy link stats 
+* proxy link stats
 
 Either daemon or switch driver initiate this protocol with a `DUMP_IFINFO`\
 request.

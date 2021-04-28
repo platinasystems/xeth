@@ -661,7 +661,7 @@ void xeth_port_reset_ethtool_stats(struct net_device *);
 
 /**
  * struct xeth_proxy -	first member of each xeth proxy device priv
- * 			{ port, vlan, bridge, lag }
+ *			{ port, vlan, bridge, lag }
  */
 struct xeth_proxy {
 	struct net_device *nd, *mux;

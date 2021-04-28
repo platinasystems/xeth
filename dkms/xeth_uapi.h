@@ -356,8 +356,8 @@ struct xeth_msg_ifinfo {
 	struct xeth_msg_header header;
 	uint32_t xid;
 	/* @kdata: kind specific data
-	 * 	vlan: { XETH_ENCAP_VLAN or XETH_ENCAP_VPLS }
-	 * 	loopback: CHANNEL )
+	 *	vlan: { XETH_ENCAP_VLAN or XETH_ENCAP_VPLS }
+	 *	loopback: CHANNEL )
 	 */
 	uint32_t kdata;
 	uint8_t ifname[XETH_IFNAMSIZ];
