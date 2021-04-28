@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+type LinkStat int
+
 type Maper interface {
 	Delete(key interface{})
 	Load(key interface{}) (value interface{}, ok bool)

@@ -253,8 +253,6 @@ func (event FibEntryEvent) String() string {
 	return s
 }
 
-type LinkStat int
-
 func (stat LinkStat) String() string {
 	s, found := map[LinkStat]string{
 		LinkStatRxPackets:         "rx-packets",
