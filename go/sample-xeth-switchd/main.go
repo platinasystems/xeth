@@ -50,10 +50,14 @@ func main() {
 selector:
 	for {
 		select {
-		case <-sigch:
+		case sig, ok := <-sigch:
+			if ok {
+				verbose("caught", sig)
+			}
 			close(stopch)
 			break selector
 		case <-task.Stop:
+			verbose("stopped")
 			break selector
 		case buf, ok := <-task.RxCh:
 			if !ok {
@@ -64,12 +68,14 @@ selector:
 				break selector
 			}
 			msg := xeth.Parse(buf)
+			verbose("<-", msg)
 			switch t := msg.(type) {
 			case xeth.Frame:
 				xid, found := xidOfDst[t.Dst().String()]
 				if found {
 					t.Xid(xid)
-					t.Loopback(task)
+					verbose("->", msg)
+					// t.Loopback(task)
 				}
 			case xeth.Break:
 				if *flagDumpFib {
@@ -80,9 +86,6 @@ selector:
 				xid := xeth.Xid(t)
 				ha := xeth.LinkOf(xid).IfInfoHardwareAddr()
 				xidOfDst[ha.String()] = xid
-				verbose(msg)
-			default:
-				verbose(msg)
 			}
 			xeth.Pool(msg)
 		}
