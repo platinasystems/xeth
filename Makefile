@@ -25,7 +25,8 @@ bindeb-pkg:
 sample-xeth-switchd: FORCE
 	$(call svo, GOBUILD,go build ./go/$@)
 
-clean: files = $(wildcard README.html sample-xeth-switchd)
+clean: files = $(wildcard README.html sample-xeth-switchd\
+	go/sample-xeth-switchd/sample-xeth-switchd)
 clean:
 	$(call svo, DKMS, $(MAKE) -C dkms, $@)
 	$(if $(files),$(call svo, CLEAN, rm, $(files)))
