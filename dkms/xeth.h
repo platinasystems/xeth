@@ -149,7 +149,7 @@ do {									\
 ({									\
 	int _err = (expr);						\
 	if (_err < 0)							\
-		xeth_nd_err(nd, "%d", _err);				\
+		xeth_nd_prefix_err(nd, #expr, "%d", _err);		\
 	(_err);								\
 })
 
