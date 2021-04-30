@@ -124,11 +124,11 @@ int xeth_nb_netdevice(struct notifier_block *netdevice, unsigned long event,
 		switch (event) {
 		case NETDEV_REGISTER:
 			xeth_sbtx_netns(mux, net, true);
-			xeth_nb_start_new_fib(mux, net);
+			/* defer start fib notifier to sbtx service */
 			break;
 		case NETDEV_UNREGISTER:
 			xeth_sbtx_netns(mux, net, false);
-			xeth_nb_stop_net_fib(mux, net);
+			/* defer stop fib notifier to sbtx service */
 			break;
 		}
 		return NOTIFY_DONE;

@@ -716,6 +716,15 @@ void xeth_mux_queue_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 		xeth_mux_free_sbtxb(mux, sbtxb);
 }
 
+static struct net *xeth_mux_net_of_inum(u64 inum)
+{
+	struct net *net;
+	list_for_each_entry(net, &net_namespace_list, list)
+		if (net->ns.inum == inum)
+			return net;
+	return NULL;
+}
+
 static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
@@ -726,6 +735,8 @@ static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 	struct msghdr msg = {
 		.msg_flags = MSG_DONTWAIT,
 	};
+	struct xeth_msg_netns *ns_msg = iov.iov_base;
+	struct net *net;
 	int n;
 
 	n = kernel_sendmsg(priv->sb.conn, &msg, &iov, 1, iov.iov_len);
@@ -733,6 +744,18 @@ static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 		xeth_mux_prepend_sbtxb(mux, sbtxb);
 		xeth_mux_inc_sbtx_retries(mux);
 		return n;
+	}
+	switch (ns_msg->header.kind) {
+	case XETH_MSG_KIND_NETNS_ADD:
+		net = xeth_mux_net_of_inum(ns_msg->net);
+		if (net)
+			xeth_nd_prif_err(mux, xeth_nb_start_new_fib(mux, net));
+		break;
+	case XETH_MSG_KIND_NETNS_DEL:
+		net = xeth_mux_net_of_inum(ns_msg->net);
+		if (net)
+			xeth_nb_stop_net_fib(mux, net);
+		break;
 	}
 	xeth_mux_free_sbtxb(mux, sbtxb);
 	if (n > 0) {
