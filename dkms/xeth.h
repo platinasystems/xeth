@@ -737,7 +737,7 @@ static inline int xeth_rtnl_unlock(int val)
 	return val;
 }
 
-int xeth_sbrx(struct net_device *mux, struct socket *conn, void *data);
+int xeth_sbrx(struct net_device *mux, struct socket *conn, void *, size_t);
 
 struct xeth_sbtxb {
 	struct list_head list;

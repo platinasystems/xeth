@@ -51,26 +51,25 @@ static void xeth_sbrx_speed(struct net_device *mux,
 }
 
 // return < 0 if error, 1 if sock closed, and 0 othewise
-int xeth_sbrx(struct net_device *mux, struct socket *conn, void *data)
+int xeth_sbrx(struct net_device *mux, struct socket *conn, void *v, size_t sz)
 {
-	struct xeth_msg_header *msg = data;
-	struct msghdr oob = {};
-	struct kvec iov = {
-		.iov_base = data,
-		.iov_len = XETH_SIZEOF_JUMBO_FRAME,
-	};
+	struct xeth_msg_header *msg = v;
+	struct msghdr mh = { .msg_flags = MSG_DONTWAIT };
+	struct kvec iov = { .iov_base = v, .iov_len = sz };
 	int n, err;
 
 	xeth_mux_inc_sbrx_ticks(mux);
-	n = kernel_recvmsg(conn, &oob, &iov, 1, iov.iov_len, 0);
+	n = kernel_recvmsg(conn, &mh, &iov, 1, iov.iov_len, mh.msg_flags);
 	if (n == -EAGAIN) {
 		schedule();
 		return 0;
 	}
 	if (n == 0 || n == -ECONNRESET)
 		return 1;
-	if (n < 0)
+	if (n < 0) {
+		xeth_nd_err(mux, "%d", n);
 		return n;
+	}
 	xeth_mux_inc_sbrx_msgs(mux);
 	if (n < sizeof(*msg) || !xeth_sbrx_is_msg(msg))
 		return -EINVAL;
@@ -89,16 +88,16 @@ int xeth_sbrx(struct net_device *mux, struct socket *conn, void *data)
 		xeth_nd_prif_err(mux, xeth_nb_start_netevent(mux));
 		break;
 	case XETH_MSG_KIND_CARRIER:
-		xeth_sbrx_carrier(mux, data);
+		xeth_sbrx_carrier(mux, v);
 		break;
 	case XETH_MSG_KIND_ETHTOOL_STAT:
-		xeth_sbrx_et_stat(mux, data);
+		xeth_sbrx_et_stat(mux, v);
 		break;
 	case XETH_MSG_KIND_LINK_STAT:
-		xeth_sbrx_link_stat(mux, data);
+		xeth_sbrx_link_stat(mux, v);
 		break;
 	case XETH_MSG_KIND_SPEED:
-		xeth_sbrx_speed(mux, data);
+		xeth_sbrx_speed(mux, v);
 		break;
 	default:
 		xeth_mux_inc_sbrx_invalid(mux);
