@@ -1,3 +1,21 @@
+xeth (3.0.2.4) buster; urgency=medium
+
+  [ Tom Grennan ]
+  * add endian package
+  * add eth protocol/types w/ stringer
+  * add sample-xeth-switchd make target
+  * add signal debug
+  * merge sample switchd flag processing
+  * fix whitespace
+  * move LinkStat type def
+  * clean sample-xeth-switchd
+  * store link kdata attr
+  * show expr w/ prif_err
+  * make sbrx buffer an array instead of alloc
+  * defer start/stop fib notifier to sbtx netns add/del
+
+ -- Kevin Paul Herbert <kph@platinasystems.com>  Fri, 30 Apr 2021 17:14:16 -0700
+
 xeth (3.0.2.3) stretch; urgency=medium
 
   [ Tom Grennan ]
