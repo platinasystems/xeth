@@ -630,7 +630,6 @@ int xeth_nb_start_inet6addr(struct net_device *mux);
 int xeth_nb_start_netdevice(struct net_device *mux);
 int xeth_nb_start_netevent(struct net_device *mux);
 
-void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net);
 void xeth_nb_stop_all_fib(struct net_device *mux);
 void xeth_nb_stop_inetaddr(struct net_device *mux);
 void xeth_nb_stop_inet6addr(struct net_device *mux);
@@ -780,7 +779,7 @@ int xeth_sbtx_ifa6(struct net_device *, struct inet6_ifaddr *ifa,
 int xeth_sbtx_ifinfo(struct xeth_proxy *, unsigned iff,
 		     enum xeth_msg_ifinfo_reason);
 int xeth_sbtx_neigh_update(struct net_device *, struct neighbour *neigh);
-int xeth_sbtx_netns(struct net_device *, struct net *ndnet, bool add);
+int xeth_sbtx_netns(struct net_device *, u64 ns_inum, bool add);
 
 #if !defined(XETH_VERSION)
 #define XETH_VERSION "undefined"

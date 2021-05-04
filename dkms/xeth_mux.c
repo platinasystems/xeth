@@ -745,17 +745,10 @@ static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 		xeth_mux_inc_sbtx_retries(mux);
 		return n;
 	}
-	switch (ns_msg->header.kind) {
-	case XETH_MSG_KIND_NETNS_ADD:
+	if (ns_msg->header.kind == XETH_MSG_KIND_NETNS_ADD) {
 		net = xeth_mux_net_of_inum(ns_msg->net);
 		if (net)
 			xeth_nd_prif_err(mux, xeth_nb_start_new_fib(mux, net));
-		break;
-	case XETH_MSG_KIND_NETNS_DEL:
-		net = xeth_mux_net_of_inum(ns_msg->net);
-		if (net)
-			xeth_nb_stop_net_fib(mux, net);
-		break;
 	}
 	xeth_mux_free_sbtxb(mux, sbtxb);
 	if (n > 0) {

@@ -413,9 +413,8 @@ int xeth_sbtx_neigh_update(struct net_device *mux, struct neighbour *neigh)
 	return 0;
 }
 
-int xeth_sbtx_netns(struct net_device *mux, struct net *ndnet, bool add)
+int xeth_sbtx_netns(struct net_device *mux, u64 ns_inum, bool add)
 {
-	uint64_t net = net_eq(ndnet, &init_net) ? 1 : ndnet->ns.inum;
 	struct xeth_sbtxb *sbtxb;
 	struct xeth_msg_netns *msg;
 
@@ -425,7 +424,7 @@ int xeth_sbtx_netns(struct net_device *mux, struct net *ndnet, bool add)
 	msg = xeth_sbtxb_data(sbtxb);
 	xeth_sbtx_msg_set(msg, add ?
 			  XETH_MSG_KIND_NETNS_ADD : XETH_MSG_KIND_NETNS_DEL);
-	msg->net = net;
+	msg->net = ns_inum;
 	xeth_mux_queue_sbtx(mux, sbtxb);
 	return 0;
 }

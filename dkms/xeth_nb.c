@@ -11,6 +11,8 @@
 
 #include <net/ip_fib.h>
 
+static void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net);
+
 static int xeth_nb_fib(struct notifier_block *fib, unsigned long event,
 		       void *ptr)
 {
@@ -121,14 +123,15 @@ int xeth_nb_netdevice(struct notifier_block *netdevice, unsigned long event,
 		 * loopback corresponds to netns creation/destruction.
 		 */
 		struct net *net = dev_net(nd);
+		u64 ns_inum = net_eq(net, &init_net) ? 1 : net->ns.inum;
 		switch (event) {
 		case NETDEV_REGISTER:
-			xeth_sbtx_netns(mux, net, true);
 			/* defer start fib notifier to sbtx service */
+			xeth_sbtx_netns(mux, ns_inum, true);
 			break;
 		case NETDEV_UNREGISTER:
-			xeth_sbtx_netns(mux, net, false);
-			/* defer stop fib notifier to sbtx service */
+			xeth_nb_stop_net_fib(mux, net);
+			xeth_sbtx_netns(mux, ns_inum, false);
 			break;
 		}
 		return NOTIFY_DONE;
@@ -231,7 +234,7 @@ int xeth_nb_start_all_fib(struct net_device *mux)
 	return 0;
 }
 
-void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net)
+static void xeth_nb_stop_net_fib(struct net_device *mux, struct net *net)
 {
 	struct xeth_nb *nb = xeth_mux_nb(mux);
 	struct xeth_fibmuxnet *fmn, *tmp;
