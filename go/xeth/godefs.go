@@ -9,7 +9,6 @@ package xeth
 typedef int bool;
 typedef uint64_t u64;
 #include "xeth_uapi.h"
-#include "netdev_features.h"
 */
 import "C"
 
@@ -259,5 +258,6 @@ const (
 )
 
 const (
-	NetIfHwL2FwdOffload = C.NETIF_F_HW_L2FW_DOFFLOAD
+	NetIfHwL2FwdOffloadBit = C.XETH_IFINFO_FEATURE_L2_FWD_OFFLOAD_BIT
+	NetIfHwL2FwdOffload    = 1 << NetIfHwL2FwdOffloadBit
 )

@@ -248,5 +248,6 @@ const (
 )
 
 const (
-	NetIfHwL2FwdOffload = 0x800000000000
+	NetIfHwL2FwdOffloadBit	= 0x0
+	NetIfHwL2FwdOffload	= 1 << NetIfHwL2FwdOffloadBit
 )

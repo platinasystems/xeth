@@ -194,6 +194,10 @@ enum xeth_msg_ifinfo_reason {
 	XETH_IFINFO_REASON_FEATURES,
 };
 
+enum xeth_msg_ifinfo_feature_bits {
+	XETH_IFINFO_FEATURE_L2_FWD_OFFLOAD_BIT
+};
+
 struct xeth_msg_header {
 	uint64_t z64;
 	uint32_t z32;

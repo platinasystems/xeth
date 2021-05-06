@@ -380,7 +380,8 @@ int xeth_sbtx_ifinfo(struct xeth_proxy *proxy, unsigned iff,
 	memcpy(msg->addr, proxy->nd->dev_addr, ETH_ALEN);
 	msg->kind = proxy->kind;
 	msg->reason = reason;
-	msg->features = proxy->nd->features;
+	if (proxy->nd->features & NETIF_F_HW_L2FW_DOFFLOAD)
+		msg->features |= 1 << XETH_IFINFO_FEATURE_L2_FWD_OFFLOAD_BIT;
 	xeth_mux_queue_sbtx(proxy->mux, sbtxb);
 	return 0;
 }
