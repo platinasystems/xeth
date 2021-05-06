@@ -50,27 +50,9 @@ static void xeth_sbrx_speed(struct net_device *mux,
 		xeth_port_speed(proxy->nd, msg->mbps);
 }
 
-// return < 0 if error, 1 if sock closed, and 0 othewise
-int xeth_sbrx(struct net_device *mux, struct socket *conn, void *v, size_t sz)
+int xeth_sbrx_msg(struct net_device *mux, void *v, size_t n)
 {
 	struct xeth_msg_header *msg = v;
-	struct msghdr mh = { .msg_flags = MSG_DONTWAIT };
-	struct kvec iov = { .iov_base = v, .iov_len = sz };
-	int n, err;
-
-	xeth_mux_inc_sbrx_ticks(mux);
-	n = kernel_recvmsg(conn, &mh, &iov, 1, iov.iov_len, mh.msg_flags);
-	if (n == -EAGAIN) {
-		schedule();
-		return 0;
-	}
-	if (n == 0 || n == -ECONNRESET)
-		return 1;
-	if (n < 0) {
-		xeth_nd_err(mux, "%d", n);
-		return n;
-	}
-	xeth_mux_inc_sbrx_msgs(mux);
 	if (n < sizeof(*msg) || !xeth_sbrx_is_msg(msg))
 		return -EINVAL;
 	if (msg->version != XETH_MSG_VERSION)
@@ -101,7 +83,7 @@ int xeth_sbrx(struct net_device *mux, struct socket *conn, void *v, size_t sz)
 		break;
 	default:
 		xeth_mux_inc_sbrx_invalid(mux);
-		err = -EINVAL;
+		return -EINVAL;
 	}
 	return 0;
 }

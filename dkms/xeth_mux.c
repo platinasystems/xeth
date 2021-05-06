@@ -42,7 +42,6 @@ struct xeth_mux_priv {
 	volatile unsigned long flags;
 	struct {
 		spinlock_t mutex;
-		struct socket *conn;
 		struct list_head free, tx;
 		char rx[XETH_SIZEOF_JUMBO_FRAME];
 	} sb;
@@ -606,35 +605,6 @@ static int xeth_mux_validate(struct nlattr *tb[], struct nlattr *data[],
 	return 0;
 }
 
-static int xeth_mux_service_sbrx(void *data)
-{
-	struct net_device *mux = data;
-	struct xeth_mux_priv *priv = netdev_priv(mux);
-	size_t n = ARRAY_SIZE(priv->sb.rx);
-	int err;
-
-	xeth_mux_set_sbrx_task(mux);
-	allow_signal(SIGKILL);
-	for (err = 0;
-	     !err && !kthread_should_stop() && !signal_pending(current);
-	     err = xeth_sbrx(mux, priv->sb.conn, priv->sb.rx, n)
-	     );
-	xeth_nb_stop_netevent(mux);
-	xeth_nb_stop_all_fib(mux);
-	xeth_nb_stop_inetaddr(mux);
-	xeth_nb_stop_netdevice(mux);
-	xeth_mux_clear_sbrx_task(mux);
-	return err;
-}
-
-static struct task_struct *xeth_mux_fork_sbrx(struct net_device *mux)
-{
-	struct task_struct *t;
-
-	t = kthread_run(xeth_mux_service_sbrx, mux, "%s-rx", mux->name);
-	return IS_ERR(t) ? NULL :  t;
-}
-
 struct xeth_sbtxb *xeth_mux_alloc_sbtxb(struct net_device *mux, size_t len)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
@@ -725,9 +695,9 @@ static struct net *xeth_mux_net_of_inum(u64 inum)
 	return NULL;
 }
 
-static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
+static int xeth_mux_sbtx(struct net_device *mux, struct socket *sock,
+			 struct xeth_sbtxb *sbtxb)
 {
-	struct xeth_mux_priv *priv = netdev_priv(mux);
 	struct kvec iov = {
 		.iov_base = xeth_sbtxb_data(sbtxb),
 		.iov_len  = sbtxb->len,
@@ -739,7 +709,7 @@ static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 	struct net *net;
 	int n;
 
-	n = kernel_sendmsg(priv->sb.conn, &msg, &iov, 1, iov.iov_len);
+	n = kernel_sendmsg(sock, &msg, &iov, 1, iov.iov_len);
 	if (n == -EAGAIN) {
 		xeth_mux_prepend_sbtxb(mux, sbtxb);
 		xeth_mux_inc_sbtx_retries(mux);
@@ -758,32 +728,80 @@ static int xeth_mux_sbtx(struct net_device *mux, struct xeth_sbtxb *sbtxb)
 	return n < 0 ? n : 1; /* 1 indicates EOF */
 }
 
-static int xeth_mux_service_sbtx(struct net_device *mux)
+/* returns < 0 if error, 0 if timeout with nothing read, 1 if sock closed,
+ * and >1 othewise
+ */
+static int xeth_mux_sbrx(struct net_device *mux, struct socket *sock)
 {
 	struct xeth_mux_priv *priv = netdev_priv(mux);
+	struct msghdr mh = {
+		.msg_control_is_user = false,
+		.msg_flags = MSG_DONTWAIT,
+	};
+	struct kvec iov = {
+		.iov_base = priv->sb.rx,
+		.iov_len = ARRAY_SIZE(priv->sb.rx),
+	};
+	ssize_t n;
+	int err;
+
+	n = kernel_recvmsg(sock, &mh, &iov, 1, iov.iov_len, mh.msg_flags);
+	if (n == -EAGAIN)
+		return 0;
+	if (n == 0 || n == -ECONNRESET)
+		return 1;
+	if (n < 0) {
+		xeth_nd_err(mux, "kernel_recvmsg: %zd", n);
+		return n;
+	}
+	xeth_mux_inc_sbrx_msgs(mux);
+	err = xeth_sbrx_msg(mux, priv->sb.rx, n);
+	return err ? err : n;
+
+}
+
+static int xeth_mux_service_sb(struct net_device *mux, struct socket *sock)
+{
 	const unsigned int maxms = 320;
 	const unsigned int minms = 10;
 	unsigned int ms = minms;
-	int err = 0;
+	struct xeth_mux_priv *priv = netdev_priv(mux);
 	struct xeth_sbtxb *sbtxb, *tmp;
+	int err = 0;
 
-	while (!err && xeth_mux_has_sbrx_task(mux) &&
-	       !kthread_should_stop() && !signal_pending(current)) {
-		xeth_mux_inc_sbtx_ticks(mux);
+	while (!kthread_should_stop() && !signal_pending(current)) {
+		xeth_mux_inc_sbrx_ticks(mux);
+		err = xeth_mux_sbrx(mux, sock);
+		if (err == 1) {
+			err = 0;
+			break;
+		} else if (err < 0)
+			break;
+		else if (err > 0)
+			ms = minms;
 		sbtxb = xeth_mux_pop_sbtxb(mux);
 		if (sbtxb) {
 			ms = minms;
-			err = xeth_mux_sbtx(mux, sbtxb);
+			xeth_mux_inc_sbtx_ticks(mux);
+			err = xeth_mux_sbtx(mux, sock, sbtxb);
 			if (err == -EAGAIN) {
 				err = 0;
-				msleep(ms);
+				msleep_interruptible(ms);
+			} else if (err == -ECONNRESET) {
+				err = 0;
+				break;
 			}
-		} else {
-			msleep(ms);
+		} else if (err == 0) {
+			msleep_interruptible(ms);
 			if (ms < maxms)
 				ms *= 2;
 		}
 	}
+
+	xeth_nb_stop_netevent(mux);
+	xeth_nb_stop_all_fib(mux);
+	xeth_nb_stop_inetaddr(mux);
+	xeth_nb_stop_netdevice(mux);
 
 	xeth_mux_lock_sb(priv);
 	list_for_each_entry_safe(sbtxb, tmp, &priv->sb.tx, list) {
@@ -795,80 +813,80 @@ static int xeth_mux_service_sbtx(struct net_device *mux)
 	xeth_mux_unlock_sb(priv);
 	xeth_prif_err(xeth_mux_get_sbtx_queued(mux) > 0);
 
+	return err < 0 ? err : 0;
+}
+
+static int xeth_mux_main_exit(struct net_device *mux, struct socket *ln,
+			      int err)
+{
+	if (ln) {
+		sock_release(ln);
+		xeth_mux_clear_sb_listen(mux);
+	}
+	xeth_mux_clear_main_task(mux);
+	rcu_barrier();
 	return err;
 }
 
 static int xeth_mux_main(void *v)
 {
 	struct net_device *mux = v;
-	struct xeth_mux_priv *priv = netdev_priv(mux);
-	const int backlog = 3;
-	struct socket *ln = NULL;
+	const int backlog = 128;
+	struct socket *ln = NULL, *conn;
 	struct sockaddr_un addr;
-	char name[TASK_COMM_LEN];
+	char pname[TASK_COMM_LEN];
 	int n, err;
 
-	xeth_mux_set_main_task(mux);
-	get_task_comm(name, current);
 	allow_signal(SIGKILL);
+	xeth_mux_set_main_task(mux);
+	xeth_mux_drop_all_port_carrier(mux);
 
-	priv->sb.conn = NULL;
 	memset(&addr, 0, sizeof(struct sockaddr_un));
 	addr.sun_family = AF_UNIX;
+	get_task_comm(pname, current);
 	/* Note: This is an abstract namespace w/ addr.sun_path[0] == 0 */
-	n = sizeof(sa_family_t) + 1 +
-		scnprintf(addr.sun_path+1, UNIX_PATH_MAX-1, "%s",
-			  netdev_name(mux));
+	n = sizeof(sa_family_t) + 1 + strlen(pname);
+	strcpy(addr.sun_path+1, pname);
+
 	err = sock_create_kern(current->nsproxy->net_ns,
 			       AF_UNIX, SOCK_SEQPACKET, 0, &ln);
 	if (err)
-		goto xeth_mux_main_exit;
+		return xeth_mux_main_exit(mux, ln, err);
 	SOCK_INODE(ln)->i_mode &= ~(S_IRWXG | S_IRWXO);
 	err = kernel_bind(ln, (struct sockaddr *)&addr, n);
 	if (err)
-		goto xeth_mux_main_exit;
+		return xeth_mux_main_exit(mux, ln, err);
 	err = kernel_listen(ln, backlog);
 	if (err)
-		goto xeth_mux_main_exit;
-	xeth_mux_clear_sb_connection(mux);
+		return xeth_mux_main_exit(mux, ln, err);
 	xeth_mux_set_sb_listen(mux);
-	while(!err && !kthread_should_stop() && !signal_pending(current)) {
-		err = kernel_accept(ln, &priv->sb.conn, O_NONBLOCK);
-		if (!err) {
-			struct task_struct *sbrx;
-			xeth_mux_set_sb_connection(mux);
-			sbrx = xeth_mux_fork_sbrx(mux);
-			if (sbrx) {
-				xeth_mux_drop_all_port_carrier(mux);
-				xeth_mux_reset_all_link_stats(mux);
-				xeth_mux_reset_all_port_ethtool_stats(mux);
-				xeth_nd_prif_err(mux,
-						 xeth_mux_service_sbtx(mux));
-				if (xeth_mux_has_sbrx_task(mux)) {
-					kthread_stop(sbrx);
-					while (xeth_mux_has_sbrx_task(mux)) {
-						msleep_interruptible(100);
-						schedule();
-					}
-				}
-				xeth_mux_drop_all_port_carrier(mux);
-			}
-			sock_release(priv->sb.conn);
-			priv->sb.conn = NULL;
-			xeth_mux_clear_sb_connection(mux);
-		} else if (err == -EAGAIN) {
+	for (conn = NULL;
+	     !err && !kthread_should_stop() && !signal_pending(current);
+	     conn = NULL) {
+		err = kernel_accept(ln, &conn, O_NONBLOCK);
+		if (err == -EAGAIN) {
 			err = 0;
 			msleep_interruptible(100);
 			schedule();
+			continue;
+		} else if (err) {
+			xeth_nd_err(mux, "kernel_accept: %d", err);
+			continue;
 		}
+		if (!conn->ops) {
+			xeth_nd_err(mux, "NULL conn->ops");
+			err = -EOPNOTSUPP;
+			continue;
+		}
+		xeth_mux_set_sb_connection(mux);
+		xeth_mux_reset_all_link_stats(mux);
+		xeth_mux_reset_all_port_ethtool_stats(mux);
+		err = xeth_mux_service_sb(mux, conn);
+		sock_release(conn);
+		xeth_mux_clear_sb_connection(mux);
+		xeth_mux_drop_all_port_carrier(mux);
 	}
-	rcu_barrier();
-	xeth_mux_clear_sb_listen(mux);
-xeth_mux_main_exit:
-	if (ln)
-		sock_release(ln);
-	xeth_mux_clear_main_task(mux);
-	return err;
+	return xeth_mux_main_exit(mux, ln, err);
 }
 
 static void xeth_mux_uninit(struct net_device *mux)
@@ -1206,35 +1224,39 @@ static const struct ethtool_ops xeth_mux_ethtool_ops = {
 	.get_priv_flags = xeth_mux_eto_get_priv_flags,
 };
 
-static int xeth_mux_newlink(struct net *src_net, struct net_device *nd,
+static int xeth_mux_newlink(struct net *src_net, struct net_device *mux,
 			    struct nlattr *tb[], struct nlattr *data[],
 			    struct netlink_ext_ack *ack)
 {
-	struct xeth_mux_priv *priv = netdev_priv(nd);
+	struct xeth_mux_priv *priv = netdev_priv(mux);
 	struct net_device *link = NULL;
 	int err;
 
-	priv->nd = nd;
+	priv->nd = mux;
 	priv->encap = (data && data[XETH_MUX_IFLA_ENCAP]) ?
 		nla_get_u8(data[XETH_MUX_IFLA_ENCAP]) : XETH_ENCAP_VLAN;
 	if (tb && tb[IFLA_LINK]) {
-		link = dev_get_by_index(dev_net(nd),
+		link = dev_get_by_index(dev_net(mux),
 					nla_get_u32(tb[IFLA_LINK]));
 		if (IS_ERR_OR_NULL(link)) {
 			NL_SET_ERR_MSG(ack, "unkown link");
 			return PTR_ERR(priv->link);
 		}
-		eth_hw_addr_inherit(nd, link);
-		nd->addr_assign_type = NET_ADDR_STOLEN;
-		nd->min_mtu = link->min_mtu;
-		nd->max_mtu = link->max_mtu;
+		eth_hw_addr_inherit(mux, link);
+		mux->addr_assign_type = NET_ADDR_STOLEN;
+		mux->min_mtu = link->min_mtu;
+		mux->max_mtu = link->max_mtu;
 	} else
-		eth_hw_addr_random(nd);
-	err = register_netdevice(nd);
+		eth_hw_addr_random(mux);
+	err = register_netdevice(mux);
 	if (!err && link)
-		err = xeth_nd_prif_err(nd, xeth_mux_add_lower(nd, link, ack));
-	if (!err)
-		priv->main = kthread_run(xeth_mux_main, nd, "%s", nd->name);
+		err = xeth_nd_prif_err(mux, xeth_mux_add_lower(mux, link, ack));
+	if (!err) {
+		priv->main = kthread_run(xeth_mux_main, mux, "%s",
+					 netdev_name(mux));
+		if (IS_ERR(priv->main))
+			err = PTR_ERR(priv->main);
+	}
 	if (err)
 		dev_put(link);
 	return err;
@@ -1876,7 +1898,7 @@ static int xeth_mux_probe(struct platform_device *pd)
 		if (err = xeth_mux_add_lower(mux, links[i], NULL), err)
 			xeth_nd_err(mux, "link:%s: %d", links[i]->name, err);
 
-	priv->main = kthread_run(xeth_mux_main, mux, "%s", mux->name);
+	priv->main = kthread_run(xeth_mux_main, mux, "%s", netdev_name(mux));
 
 	platform_set_drvdata(pd, mux);
 
