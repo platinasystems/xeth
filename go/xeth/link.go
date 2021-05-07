@@ -11,6 +11,12 @@ import (
 
 type LinkStat int
 
+type IfInfoFeatures uint64
+
+func (f IfInfoFeatures) Has(features IfInfoFeatures) bool {
+	return (f & features) == features
+}
+
 type Maper interface {
 	Delete(key interface{})
 	Load(key interface{}) (value interface{}, ok bool)
@@ -28,7 +34,7 @@ type Linker interface {
 	IfInfoName(set ...string) string
 	IfInfoIfIndex(set ...int32) int32
 	IfInfoNetNs(set ...NetNs) NetNs
-	IfInfoFeatures(set ...uint64) uint64
+	IfInfoFeatures(set ...uint64) IfInfoFeatures
 	IfInfoFlags(set ...net.Flags) net.Flags
 	IfInfoDevKind(set ...DevKind) DevKind
 	IfInfoHardwareAddr(set ...net.HardwareAddr) net.HardwareAddr
@@ -231,12 +237,12 @@ func (l *Link) IfInfoNetNs(set ...NetNs) (netns NetNs) {
 	return
 }
 
-func (l *Link) IfInfoFeatures(set ...uint64) (features uint64) {
+func (l *Link) IfInfoFeatures(set ...uint64) (features IfInfoFeatures) {
 	if len(set) > 0 {
-		features = set[0]
+		features = IfInfoFeatures(set[0])
 		l.Store(LinkAttrIfInfoFeatures, features)
 	} else if v, ok := l.Load(LinkAttrIfInfoFeatures); ok {
-		features = v.(uint64)
+		features = v.(IfInfoFeatures)
 	}
 	return
 }
@@ -306,7 +312,7 @@ func (l *Link) IsVlan() bool {
 }
 
 func (l *Link) NetIfHwL2FwdOffload() bool {
-	return (l.IfInfoFeatures() & NetIfHwL2FwdOffload) == NetIfHwL2FwdOffload
+	return l.IfInfoFeatures().Has(NetIfHwL2FwdOffload)
 }
 
 func (l *Link) LinkModesSupported(set ...EthtoolLinkModeBits) EthtoolLinkModeBits {

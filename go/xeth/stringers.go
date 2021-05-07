@@ -6,126 +6,135 @@ package xeth
 
 import "fmt"
 
-func (xid Xid) Format(f fmt.State, c rune) {
+func (xid Xid) Format(w fmt.State, c rune) {
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, l.IfInfoName())
+		fmt.Fprint(w, l.IfInfoName())
 	} else if xid > VlanNVid {
-		fmt.Fprintf(f, "(%d, %d)", xid&VlanVidMask, xid/VlanNVid)
+		fmt.Fprintf(w, "(%d, %d)", xid&VlanVidMask, xid/VlanNVid)
 	} else {
-		fmt.Fprint(f, uint32(xid))
+		fmt.Fprint(w, uint32(xid))
 	}
 }
 
 func (Break) String() string { return "break" }
 
-func (dev DevNew) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "new ", Xid(dev))
+func (dev DevNew) Format(w fmt.State, c rune) {
+	xid := Xid(dev)
+	fmt.Fprint(w, "new ", xid)
+	if l := LinkOf(xid); l != nil {
+		fmt.Fprint(w, " features ", l.IfInfoFeatures())
+	}
 }
 
-func (dev DevDel) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "del ", Xid(dev))
+func (dev DevDel) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, "del ", Xid(dev))
 }
 
-func (dev DevUp) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, Xid(dev), " up")
+func (dev DevUp) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, Xid(dev), " up")
 }
 
-func (dev DevDown) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, Xid(dev), " down")
+func (dev DevDown) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, Xid(dev), " down")
 }
 
-func (dev DevDump) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, Xid(dev), " dump")
+func (dev DevDump) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, Xid(dev), " dump")
 }
 
-func (reg DevReg) Format(f fmt.State, c rune) {
+func (reg DevReg) Format(w fmt.State, c rune) {
 	xid := Xid(reg)
-	fmt.Fprint(f, xid, " reg")
+	fmt.Fprint(w, xid, " reg")
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, " ", l.IfInfoNetNs())
+		fmt.Fprint(w, " ", l.IfInfoNetNs())
 	}
 }
 
-func (dev DevUnreg) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, Xid(dev), " unreg")
+func (dev DevUnreg) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, Xid(dev), " unreg")
 }
 
-func (dev DevFeatures) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, Xid(dev), " features")
-}
-
-func (dev *DevAddIPNet) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, dev.Xid, " add ", dev.IPNet)
-}
-
-func (dev *DevDelIPNet) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, dev.Xid, " del ", dev.Prefix)
-}
-
-func (dev *DevJoin) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, dev.Lower, " join ", dev.Upper)
-}
-
-func (dev *DevQuit) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, dev.Lower, " quit ", dev.Upper)
-}
-
-func (dev *DevEthtoolFlags) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, dev.Xid, " ethtool flags <", dev.EthtoolFlagBits, ">")
-}
-
-func (dev DevEthtoolSettings) Format(f fmt.State, c rune) {
+func (dev DevFeatures) Format(w fmt.State, c rune) {
+	var f IfInfoFeatures
 	xid := Xid(dev)
-	fmt.Fprint(f, xid)
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, " speed ", l.EthtoolSpeed(), " (mbps)")
-		fmt.Fprint(f, " autoneg ", l.EthtoolAutoNeg())
-		fmt.Fprint(f, " duplex ", l.EthtoolDuplex())
-		fmt.Fprint(f, " port ", l.EthtoolDevPort())
-	} else {
-		fmt.Fprint(f, " ethtool settings")
+		f = l.IfInfoFeatures()
 	}
+	fmt.Fprint(w, xid, " features ", f)
 }
 
-func (dev DevLinkModesSupported) Format(f fmt.State, c rune) {
+func (dev *DevAddIPNet) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, dev.Xid, " add ", dev.IPNet)
+}
+
+func (dev *DevDelIPNet) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, dev.Xid, " del ", dev.Prefix)
+}
+
+func (dev *DevJoin) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, dev.Lower, " join ", dev.Upper)
+}
+
+func (dev *DevQuit) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, dev.Lower, " quit ", dev.Upper)
+}
+
+func (dev *DevEthtoolFlags) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, dev.Xid, " ethtool flags <", dev.EthtoolFlagBits, ">")
+}
+
+func (dev DevEthtoolSettings) Format(w fmt.State, c rune) {
 	xid := Xid(dev)
-	fmt.Fprint(f, xid)
+	fmt.Fprint(w, xid)
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, " <", l.LinkModesSupported(), ">")
+		fmt.Fprint(w, " speed ", l.EthtoolSpeed(), " (mbps)")
+		fmt.Fprint(w, " autoneg ", l.EthtoolAutoNeg())
+		fmt.Fprint(w, " duplex ", l.EthtoolDuplex())
+		fmt.Fprint(w, " port ", l.EthtoolDevPort())
 	} else {
-		fmt.Fprint(f, " <supported link modes>")
+		fmt.Fprint(w, " ethtool settings")
 	}
 }
 
-func (dev DevLinkModesAdvertising) Format(f fmt.State, c rune) {
+func (dev DevLinkModesSupported) Format(w fmt.State, c rune) {
 	xid := Xid(dev)
-	fmt.Fprint(f, xid)
+	fmt.Fprint(w, xid)
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, " <", l.LinkModesAdvertising(), ">")
+		fmt.Fprint(w, " <", l.LinkModesSupported(), ">")
 	} else {
-		fmt.Fprint(f, " <advertising link modes>")
+		fmt.Fprint(w, " <supported link modes>")
 	}
 }
 
-func (dev DevLinkModesLPAdvertising) Format(f fmt.State, c rune) {
+func (dev DevLinkModesAdvertising) Format(w fmt.State, c rune) {
 	xid := Xid(dev)
-	fmt.Fprint(f, xid)
+	fmt.Fprint(w, xid)
 	if l := LinkOf(xid); l != nil {
-		fmt.Fprint(f, " <", l.LinkModesLPAdvertising(), ">")
+		fmt.Fprint(w, " <", l.LinkModesAdvertising(), ">")
 	} else {
-		fmt.Fprint(f, " <link partner advertising link modes>")
+		fmt.Fprint(w, " <advertising link modes>")
 	}
 }
 
-func (bits EthtoolFlagBits) Format(f fmt.State, c rune) {
+func (dev DevLinkModesLPAdvertising) Format(w fmt.State, c rune) {
+	xid := Xid(dev)
+	fmt.Fprint(w, xid)
+	if l := LinkOf(xid); l != nil {
+		fmt.Fprint(w, " <", l.LinkModesLPAdvertising(), ">")
+	} else {
+		fmt.Fprint(w, " <link partner advertising link modes>")
+	}
+}
+
+func (bits EthtoolFlagBits) Format(w fmt.State, c rune) {
 	if bits == 0 {
-		f.Write([]byte("none"))
+		w.Write([]byte("none"))
 	} else {
-		fmt.Fprintf(f, "0b%b", uint32(bits))
+		fmt.Fprintf(w, "0b%b", uint32(bits))
 	}
 }
 
-func (bits EthtoolLinkModeBits) Format(f fmt.State, c rune) {
+func (bits EthtoolLinkModeBits) Format(w fmt.State, c rune) {
 	sep := ""
 	for i, s := range []string{
 		"10baseT-half",
@@ -182,58 +191,58 @@ func (bits EthtoolLinkModeBits) Format(f fmt.State, c rune) {
 		"fec-baser",
 	} {
 		if bits.Test(uint(i)) {
-			fmt.Fprint(f, sep, s)
+			fmt.Fprint(w, sep, s)
 			sep = ", "
 		}
 	}
 	if len(sep) == 0 {
-		fmt.Fprint(f, "none")
+		fmt.Fprint(w, "none")
 	}
 }
 
-func (msg *FibEntry) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, msg.FibEntryEvent)
-	fmt.Fprint(f, " netns ", msg.NetNs)
-	fmt.Fprint(f, " table ", msg.RtTable)
-	fmt.Fprint(f, " type ", msg.Rtn)
-	fmt.Fprint(f, " ", &msg.IPNet)
+func (msg *FibEntry) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, msg.FibEntryEvent)
+	fmt.Fprint(w, " netns ", msg.NetNs)
+	fmt.Fprint(w, " table ", msg.RtTable)
+	fmt.Fprint(w, " type ", msg.Rtn)
+	fmt.Fprint(w, " ", &msg.IPNet)
 	if len(msg.NHs) == 1 {
-		fmt.Fprint(f, " nexthop ", msg.NHs[0])
+		fmt.Fprint(w, " nexthop ", msg.NHs[0])
 	} else {
-		fmt.Fprint(f, " nexthops [")
+		fmt.Fprint(w, " nexthops [")
 		sep := ""
 		for _, nh := range msg.NHs {
-			fmt.Fprint(f, sep, nh)
+			fmt.Fprint(w, sep, nh)
 			sep = ", "
 		}
-		fmt.Fprint(f, "]")
+		fmt.Fprint(w, "]")
 	}
 }
 
-func (msg *Neighbor) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "neighbor")
-	fmt.Fprint(f, " netns ", msg.NetNs)
-	fmt.Fprint(f, " ", msg.Xid)
-	fmt.Fprint(f, " ", msg.IP)
-	fmt.Fprint(f, " ", msg.HardwareAddr)
+func (msg *Neighbor) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, "neighbor")
+	fmt.Fprint(w, " netns ", msg.NetNs)
+	fmt.Fprint(w, " ", msg.Xid)
+	fmt.Fprint(w, " ", msg.IP)
+	fmt.Fprint(w, " ", msg.HardwareAddr)
 }
 
-func (msg NetNsAdd) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "netns add ", msg.NetNs)
+func (msg NetNsAdd) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, "netns add ", msg.NetNs)
 }
 
-func (msg NetNsDel) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "netns del ", msg.NetNs)
+func (msg NetNsDel) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, "netns del ", msg.NetNs)
 }
 
-func (nh *NH) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "{")
-	fmt.Fprint(f, nh.IP)
-	fmt.Fprint(f, " ", nh.Xid)
-	fmt.Fprint(f, " weight ", nh.Weight)
-	fmt.Fprint(f, " flags <", nh.RtnhFlags, ">")
-	fmt.Fprint(f, " scope ", nh.RtScope)
-	fmt.Fprint(f, "}")
+func (nh *NH) Format(w fmt.State, c rune) {
+	fmt.Fprint(w, "{")
+	fmt.Fprint(w, nh.IP)
+	fmt.Fprint(w, " ", nh.Xid)
+	fmt.Fprint(w, " weight ", nh.Weight)
+	fmt.Fprint(w, " flags <", nh.RtnhFlags, ">")
+	fmt.Fprint(w, " scope ", nh.RtScope)
+	fmt.Fprint(w, "}")
 }
 
 func (event FibEntryEvent) String() string {
@@ -372,7 +381,7 @@ func (rtn Rtn) String() string {
 	return s
 }
 
-func (flags RtnhFlags) Format(f fmt.State, c rune) {
+func (flags RtnhFlags) Format(w fmt.State, c rune) {
 	sep := ""
 	for _, x := range []struct {
 		flag RtnhFlags
@@ -386,12 +395,12 @@ func (flags RtnhFlags) Format(f fmt.State, c rune) {
 		{RTNH_F_UNRESOLVED, "unresolved"},
 	} {
 		if flags&x.flag == x.flag {
-			fmt.Fprint(f, sep, x.name)
+			fmt.Fprint(w, sep, x.name)
 			sep = ", "
 		}
 	}
 	if len(sep) == 0 {
-		fmt.Fprint(f, "none")
+		fmt.Fprint(w, "none")
 	}
 }
 
@@ -431,4 +440,22 @@ func (f Frame) Format(w fmt.State, c rune) {
 		fmt.Fprint(w, " {", xid, ")")
 	}
 	fmt.Fprint(w, " ", f.EthP())
+}
+
+func (f IfInfoFeatures) Format(w fmt.State, c rune) {
+	var sep string
+	for _, flag := range []struct {
+		f    IfInfoFeatures
+		name string
+	}{
+		{NetIfHwL2FwdOffload, "l2-fwd-offload"},
+	} {
+		if f.Has(flag.f) {
+			fmt.Fprint(w, sep, flag.name)
+			sep = ", "
+		}
+	}
+	if len(sep) == 0 {
+		fmt.Fprint(w, "off")
+	}
 }
