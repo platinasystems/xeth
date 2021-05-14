@@ -1,3 +1,13 @@
+xeth (3.0.3) buster; urgency=medium
+
+  [ Tom Grennan ]
+  * donot defer unreg of fib notifier
+  * fix sb sock incoherency w/ rtnl created mux
+  * translate netdev_feature bits to xeth defs
+  * update stringers to show features
+
+ -- Kevin Paul Herbert <kph@platinasystems.com>  Fri, 14 May 2021 10:31:13 -0700
+
 xeth (3.0.2.4) buster; urgency=medium
 
   [ Tom Grennan ]
